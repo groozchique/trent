@@ -40,6 +40,7 @@
   --status-available-dot: #647084;
 
   --status-danger: #c9352b;
+  --status-danger-fg: #ffffff;
   --status-success: #157347;
   --focus-ring: #1e2430;
 }
@@ -81,6 +82,7 @@
   --status-available-dot: #94a3b8;
 
   --status-danger: #f87171;
+  --status-danger-fg: #111317;
   --status-success: #4ade80;
   --focus-ring: #facc15;
 }
