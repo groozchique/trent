@@ -1,4 +1,5 @@
 import type { RentalPeriodicity } from '@/db/schema';
+import { DAY_MS, formatUtcDateIso, parseUtcDateMs, shiftUtcDaysIso } from '@/lib/format';
 
 export type TimelineItem = {
   dueDate: string;
@@ -7,15 +8,23 @@ export type TimelineItem = {
   paidAt: string | null;
 };
 
-const DAY_MS = 86_400_000;
+export type RentalTimelineInput = {
+  rateAmount: number;
+  periodicity: RentalPeriodicity;
+  startDate: string;
+  endDate?: string | null;
+  active?: boolean;
+};
+
+export type TimelinePaymentInput = {
+  dueDate: string;
+  amount: number;
+  paidAt: string | null;
+};
 
 function parseUtcDate(isoDate: string): { year: number; month: number; day: number; ms: number } {
   const [y, m, d] = isoDate.split('-').map(Number);
   return { year: y, month: m - 1, day: d, ms: Date.UTC(y, m - 1, d) };
-}
-
-function formatUtcMs(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
 }
 
 function addMonthlyClamped(
@@ -28,25 +37,25 @@ function addMonthlyClamped(
   const year = Math.floor(totalMonths / 12);
   const month = totalMonths % 12;
   const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return formatUtcMs(Date.UTC(year, month, Math.min(anchorDay, lastDay)));
+  return formatUtcDateIso(Date.UTC(year, month, Math.min(anchorDay, lastDay)));
 }
 
 function generateDueDates(
   startDate: string,
   periodicity: RentalPeriodicity,
   minDate: string,
-  todayIso: string,
+  upperIso: string,
 ): string[] {
   const start = parseUtcDate(startDate);
   const dates: string[] = [];
 
   if (periodicity === 'daily' || periodicity === 'weekly') {
     const stepMs = (periodicity === 'daily' ? 1 : 7) * DAY_MS;
-    const minMs = parseUtcDate(minDate).ms;
-    const todayMs = parseUtcDate(todayIso).ms;
+    const minMs = parseUtcDateMs(minDate);
+    const upperMs = parseUtcDateMs(upperIso);
     const firstStep = minMs <= start.ms ? 0 : Math.ceil((minMs - start.ms) / stepMs);
-    for (let ms = start.ms + firstStep * stepMs; ms <= todayMs; ms += stepMs) {
-      dates.push(formatUtcMs(ms));
+    for (let ms = start.ms + firstStep * stepMs; ms <= upperMs; ms += stepMs) {
+      dates.push(formatUtcDateIso(ms));
     }
     return dates;
   }
@@ -58,29 +67,39 @@ function generateDueDates(
   );
   for (let offset = startOffset; ; offset += 1) {
     const due = addMonthlyClamped(start.year, start.month, start.day, offset);
-    if (due > todayIso) break;
+    if (due > upperIso) break;
     if (due >= minDate) dates.push(due);
   }
   return dates;
 }
 
-/** Build the 30-day inclusive rental payment timeline up to `todayIso`. */
+/** Build the 30-day inclusive rental payment timeline up to `min(todayIso, endDate)`. */
 export function buildRentalTimeline(
-  rental: { rateAmount: number; periodicity: RentalPeriodicity; startDate: string } | null,
-  payments: Array<{ dueDate: string; amount: number; paidAt: string | null }>,
+  rental: RentalTimelineInput | null,
+  payments: TimelinePaymentInput[],
   todayIso: string,
 ): TimelineItem[] {
   if (rental === null || rental.startDate > todayIso) return [];
 
-  const windowStartIso = formatUtcMs(parseUtcDate(todayIso).ms - 29 * DAY_MS);
+  const windowStartIso = shiftUtcDaysIso(todayIso, -29);
   const minDate = rental.startDate > windowStartIso ? rental.startDate : windowStartIso;
+  const endDate = rental.endDate && rental.endDate.length > 0 ? rental.endDate : null;
+  const upperIso = endDate !== null && endDate < todayIso ? endDate : todayIso;
+  if (upperIso < minDate) return [];
+
+  const isClosedOnOrBeforeToday =
+    rental.active === false && endDate !== null && endDate <= todayIso;
   const paymentByDue = new Map(payments.map((p) => [p.dueDate, p]));
 
-  return generateDueDates(rental.startDate, rental.periodicity, minDate, todayIso).map((dueDate) => {
+  return generateDueDates(rental.startDate, rental.periodicity, minDate, upperIso).map((dueDate) => {
     const payment = paymentByDue.get(dueDate);
     const paidAt = payment?.paidAt ?? null;
     const status: TimelineItem['status'] =
-      paidAt !== null ? 'paid' : dueDate < todayIso ? 'overdue' : 'upcoming';
+      paidAt !== null
+        ? 'paid'
+        : isClosedOnOrBeforeToday || dueDate < todayIso
+          ? 'overdue'
+          : 'upcoming';
 
     return {
       dueDate,

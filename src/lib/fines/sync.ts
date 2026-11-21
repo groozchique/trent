@@ -1,16 +1,30 @@
 import { eq, inArray } from 'drizzle-orm';
 import type { AppDb } from '@/db';
 import { fines } from '@/db/schema';
+import { resolveFineDriverId } from './attribution';
 import { getFinesProvider, type FinesProvider } from './provider';
 
-/** Fetch fines for a plate and upsert them idempotently by resolutionNumber. */
+export type SyncCarFinesOptions =
+  | FinesProvider
+  | {
+      stsNumber?: string | null;
+      provider?: FinesProvider;
+    };
+
+function isFinesProvider(options: SyncCarFinesOptions | undefined): options is FinesProvider {
+  return options !== undefined && typeof (options as FinesProvider).fetchFinesByPlate === 'function';
+}
+
+/** Fetch fines for a plate (with optional STS), attribute driver from rental history, and upsert idempotently. */
 export async function syncCarFines(
   database: AppDb,
   carId: number,
   plate: string,
-  provider: FinesProvider = getFinesProvider(),
+  options?: SyncCarFinesOptions,
 ): Promise<{ inserted: number; updated: number }> {
-  const fetched = await provider.fetchFinesByPlate(plate);
+  const provider = isFinesProvider(options) ? options : (options?.provider ?? getFinesProvider());
+  const stsNumber = isFinesProvider(options) ? undefined : options?.stsNumber;
+  const fetched = await provider.fetchFinesByPlate(plate, stsNumber);
   if (fetched.length === 0) {
     return { inserted: 0, updated: 0 };
   }
@@ -23,6 +37,7 @@ export async function syncCarFines(
       .select({
         id: fines.id,
         carId: fines.carId,
+        driverId: fines.driverId,
         resolutionNumber: fines.resolutionNumber,
       })
       .from(fines)
@@ -48,12 +63,20 @@ export async function syncCarFines(
       const existingRow = existingByRes.get(fine.resolutionNumber);
       if (existingRow !== undefined) {
         if (existingRow.carId !== carId) continue;
-        tx.update(fines).set(mutableFields).where(eq(fines.id, existingRow.id)).run();
+        const driverPatch =
+          existingRow.driverId === null
+            ? { driverId: resolveFineDriverId(tx, carId, fine.violatedAt) }
+            : {};
+        tx.update(fines)
+          .set({ ...mutableFields, ...driverPatch })
+          .where(eq(fines.id, existingRow.id))
+          .run();
         updated += 1;
       } else {
         tx.insert(fines)
           .values({
             carId,
+            driverId: resolveFineDriverId(tx, carId, fine.violatedAt),
             resolutionNumber: fine.resolutionNumber,
             ...mutableFields,
           })

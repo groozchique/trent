@@ -1,4 +1,4 @@
-const DAY_MS = 86_400_000;
+export const DAY_MS = 86_400_000;
 const RU_NUMBER = new Intl.NumberFormat('ru-RU');
 const ISO_PREFIX_RE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/;
 
@@ -6,9 +6,25 @@ function formatRuNumber(value: number): string {
   return RU_NUMBER.format(value).replace(/[\u00a0\u202f]/g, ' ');
 }
 
-function parseUtcDateMs(isoDate: string): number {
+/** Parse the calendar date prefix (`YYYY-MM-DD`) into a UTC midnight timestamp. */
+export function parseUtcDateMs(isoDate: string): number {
   const [y, m, d] = isoDate.slice(0, 10).split('-').map(Number);
   return Date.UTC(y, m - 1, d);
+}
+
+/** Format a UTC timestamp in milliseconds as `YYYY-MM-DD`. */
+export function formatUtcDateIso(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Shift an ISO calendar date (`YYYY-MM-DD`) by `days` UTC days. */
+export function shiftUtcDaysIso(isoDate: string, days: number): string {
+  return formatUtcDateIso(parseUtcDateMs(isoDate) + days * DAY_MS);
+}
+
+/** Return signed whole UTC calendar days from `baseIso` to `targetIso`. */
+export function diffUtcDays(targetIso: string, baseIso: string): number {
+  return Math.round((parseUtcDateMs(targetIso) - parseUtcDateMs(baseIso)) / DAY_MS);
 }
 
 /** Format vehicle mileage in Russian convention (e.g. `142 500 км`). */
@@ -55,11 +71,9 @@ export function getDiscountState(
   if (discountDeadline === null) {
     return { active: false, daysLeft: 0 };
   }
-  const deadlineMs = parseUtcDateMs(discountDeadline);
-  const todayMs = parseUtcDateMs(todayIso);
-  if (Number.isNaN(deadlineMs) || Number.isNaN(todayMs) || todayMs > deadlineMs) {
+  const daysLeft = diffUtcDays(discountDeadline, todayIso);
+  if (Number.isNaN(daysLeft) || daysLeft < 0) {
     return { active: false, daysLeft: 0 };
   }
-  const daysLeft = Math.round((deadlineMs - todayMs) / DAY_MS);
   return { active: true, daysLeft };
 }

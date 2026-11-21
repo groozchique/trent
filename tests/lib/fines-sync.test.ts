@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createDb } from '@/db';
-import { cars, fines } from '@/db/schema';
+import { cars, drivers, fines, rentals } from '@/db/schema';
 import { getFinesProvider, type ExternalFine, type FinesProvider } from '@/lib/fines/provider';
 import { MockFinesProvider } from '@/lib/fines/mock-provider';
 import { syncCarFines } from '@/lib/fines/sync';
@@ -245,16 +245,133 @@ describe('syncCarFines', () => {
     expect(second).toEqual({ inserted: 0, updated: first.inserted });
     expect(rows).toHaveLength(first.inserted);
   });
+
+  it('passes stsNumber to provider, attributes driverId on insert/backfill, and preserves manual driverId while syncing status', async () => {
+    const db = createDb(':memory:');
+    const [car] = await db
+      .insert(cars)
+      .values({
+        plate: 'Н555УХ 777',
+        brand: 'Kia',
+        model: 'Rio',
+        status: 'in_rent',
+        mileage: 75000,
+        stsNumber: '99 01 123456',
+      })
+      .returning();
+
+    const [driverA, driverB] = await db
+      .insert(drivers)
+      .values([
+        { fullName: 'Иванов Алексей' },
+        { fullName: 'Петров Олег' },
+      ])
+      .returning();
+
+    await db.insert(rentals).values({
+      carId: car.id,
+      driverId: driverA.id,
+      renterName: driverA.fullName,
+      rateAmount: 2200,
+      periodicity: 'daily',
+      startDate: '2026-11-01',
+      endDate: '2026-11-10',
+      active: false,
+    });
+
+    const receivedCalls: Array<{ plate: string; stsNumber: string | null | undefined }> = [];
+    let payload: ExternalFine[] = [
+      {
+        resolutionNumber: '18810177261100000901',
+        violatedAt: '2026-11-05T14:00:00+03:00',
+        amount: 1000,
+        discountAmount: 750,
+        discountDeadline: '2026-12-05',
+        paymentDeadline: '2027-01-14',
+        description: 'Скорость на период аренды А',
+        status: 'unpaid',
+      },
+      {
+        resolutionNumber: '18810177261100000902',
+        violatedAt: '2026-11-15T14:00:00+03:00',
+        amount: 1500,
+        discountAmount: null,
+        discountDeadline: null,
+        paymentDeadline: '2027-01-24',
+        description: 'Штраф без аренды на момент первой синхронизации',
+        status: 'unpaid',
+      },
+    ];
+
+    const provider: FinesProvider = {
+      async fetchFinesByPlate(plate, stsNumber) {
+        receivedCalls.push({ plate, stsNumber });
+        return payload;
+      },
+    };
+
+    const first = await syncCarFines(db, car.id, car.plate, {
+      stsNumber: car.stsNumber,
+      provider,
+    });
+    expect(first).toEqual({ inserted: 2, updated: 0 });
+    expect(receivedCalls).toEqual([{ plate: 'Н555УХ 777', stsNumber: '99 01 123456' }]);
+
+    const afterFirst = await db.select().from(fines).where(eq(fines.carId, car.id));
+    expect(afterFirst.find((f) => f.resolutionNumber === '18810177261100000901')?.driverId).toBe(
+      driverA.id,
+    );
+    expect(afterFirst.find((f) => f.resolutionNumber === '18810177261100000902')?.driverId).toBeNull();
+
+    // Manually reassign fine 901 to driverB, and add a rental for driverB covering 2026-11-15 so fine 902 can backfill.
+    await db
+      .update(fines)
+      .set({ driverId: driverB.id })
+      .where(eq(fines.resolutionNumber, '18810177261100000901'));
+
+    await db.insert(rentals).values({
+      carId: car.id,
+      driverId: driverB.id,
+      renterName: driverB.fullName,
+      rateAmount: 2400,
+      periodicity: 'daily',
+      startDate: '2026-11-12',
+      endDate: null,
+      active: true,
+    });
+
+    payload = payload.map((item) =>
+      item.resolutionNumber === '18810177261100000901'
+        ? { ...item, status: 'paid' }
+        : item,
+    );
+
+    const second = await syncCarFines(db, car.id, car.plate, {
+      stsNumber: null,
+      provider,
+    });
+    expect(second).toEqual({ inserted: 0, updated: 2 });
+    expect(receivedCalls[1]).toEqual({ plate: 'Н555УХ 777', stsNumber: null });
+
+    const afterSecond = await db.select().from(fines).where(eq(fines.carId, car.id));
+    const fine901 = afterSecond.find((f) => f.resolutionNumber === '18810177261100000901');
+    const fine902 = afterSecond.find((f) => f.resolutionNumber === '18810177261100000902');
+    expect(fine901?.driverId).toBe(driverB.id);
+    expect(fine901?.status).toBe('paid');
+    expect(fine902?.driverId).toBe(driverB.id);
+  });
 });
 
 describe('MockFinesProvider', () => {
   it('deterministically generates 1-5 realistic fines with 20-digit resolution numbers', async () => {
     const provider = new MockFinesProvider();
     const first = await provider.fetchFinesByPlate('А123ВС 777');
-    const second = await provider.fetchFinesByPlate(' а123вс 777 ');
+    const second = await provider.fetchFinesByPlate(' а123вс 777 ', '99 01 123456');
+    const third = await provider.fetchFinesByPlate('А123ВС 777', null);
     const other = await provider.fetchFinesByPlate('К999МР 97');
 
     expect(first).toEqual(second);
+    expect(first).toEqual(third);
     expect(first.length).toBeGreaterThanOrEqual(1);
     expect(first.length).toBeLessThanOrEqual(5);
     expect(other).not.toEqual(first);

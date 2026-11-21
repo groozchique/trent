@@ -53,7 +53,8 @@ function isoDateOffset(baseMs: number, days: number): string {
 
 /** Deterministic mock provider generating 1–5 Russian traffic fines per vehicle plate. */
 export class MockFinesProvider implements FinesProvider {
-  async fetchFinesByPlate(plate: string): Promise<ExternalFine[]> {
+  async fetchFinesByPlate(plate: string, stsNumber?: string | null): Promise<ExternalFine[]> {
+    void stsNumber;
     const normalized = plate.trim().toUpperCase();
     const rootDigest = createHash('sha256').update(normalized).digest();
     const count = 1 + (rootDigest[0] % 5);

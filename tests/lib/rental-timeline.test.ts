@@ -109,6 +109,74 @@ describe('buildRentalTimeline', () => {
     );
     expect(futureItems).toEqual([]);
   });
+
+  it('marks unpaid dueDate === endDate === todayIso as overdue for closed rentals and stops after endDate', () => {
+    const closedToday = buildRentalTimeline(
+      {
+        rateAmount: 2200,
+        periodicity: 'daily',
+        startDate: '2026-11-19',
+        endDate: '2026-11-21',
+        active: false,
+      },
+      [{ dueDate: '2026-11-19', amount: 2200, paidAt: '2026-11-19T10:00:00Z' }],
+      '2026-11-21',
+    );
+    expect(closedToday.map((i) => [i.dueDate, i.status])).toEqual([
+      ['2026-11-19', 'paid'],
+      ['2026-11-20', 'overdue'],
+      ['2026-11-21', 'overdue'],
+    ]);
+
+    const openToday = buildRentalTimeline(
+      {
+        rateAmount: 2200,
+        periodicity: 'daily',
+        startDate: '2026-11-19',
+        endDate: null,
+        active: true,
+      },
+      [{ dueDate: '2026-11-19', amount: 2200, paidAt: '2026-11-19T10:00:00Z' }],
+      '2026-11-21',
+    );
+    expect(openToday.map((i) => [i.dueDate, i.status])).toEqual([
+      ['2026-11-19', 'paid'],
+      ['2026-11-20', 'overdue'],
+      ['2026-11-21', 'upcoming'],
+    ]);
+
+    const closedEarlier = buildRentalTimeline(
+      {
+        rateAmount: 2000,
+        periodicity: 'daily',
+        startDate: '2026-11-12',
+        endDate: '2026-11-16',
+        active: false,
+      },
+      [{ dueDate: '2026-11-12', amount: 2000, paidAt: '2026-11-12T08:00:00Z' }],
+      '2026-11-21',
+    );
+    expect(closedEarlier.map((i) => [i.dueDate, i.status])).toEqual([
+      ['2026-11-12', 'paid'],
+      ['2026-11-13', 'overdue'],
+      ['2026-11-14', 'overdue'],
+      ['2026-11-15', 'overdue'],
+      ['2026-11-16', 'overdue'],
+    ]);
+
+    const closedBeforeWindow = buildRentalTimeline(
+      {
+        rateAmount: 2000,
+        periodicity: 'daily',
+        startDate: '2026-10-01',
+        endDate: '2026-10-22',
+        active: false,
+      },
+      [],
+      '2026-11-21',
+    );
+    expect(closedBeforeWindow).toEqual([]);
+  });
 });
 
 describe('formatters and discount state', () => {

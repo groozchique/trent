@@ -13,7 +13,7 @@ export interface ExternalFine {
 }
 
 export interface FinesProvider {
-  fetchFinesByPlate(plate: string): Promise<ExternalFine[]>;
+  fetchFinesByPlate(plate: string, stsNumber?: string | null): Promise<ExternalFine[]>;
 }
 
 /** Resolve active fines provider (defaults to deterministic MockFinesProvider). */
