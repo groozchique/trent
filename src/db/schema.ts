@@ -1,9 +1,13 @@
+import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export type UserRole = 'admin' | 'viewer';
 export type CarStatus = 'in_rent' | 'in_repair' | 'available';
 export type RentalPeriodicity = 'daily' | 'weekly' | 'monthly';
 export type FineStatus = 'unpaid' | 'paid';
+
+export const CAR_DOCUMENT_TYPES = ['osago', 'tech_inspection', 'taxi_license', 'kasko'] as const;
+export type CarDocumentType = (typeof CAR_DOCUMENT_TYPES)[number];
 
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -21,6 +25,15 @@ export const sessions = sqliteTable('sessions', {
   expiresAt: integer('expires_at').notNull(),
 });
 
+export const drivers = sqliteTable('drivers', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  fullName: text('full_name').notNull(),
+  phone: text('phone'),
+  notes: text('notes'),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+});
+
 export const cars = sqliteTable('cars', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   plate: text('plate').notNull().unique(),
@@ -30,23 +43,46 @@ export const cars = sqliteTable('cars', {
     .$type<CarStatus>()
     .notNull(),
   mileage: integer('mileage').notNull().default(0),
+  stsNumber: text('sts_number'),
+  nextServiceMileage: integer('next_service_mileage'),
+  nextServiceDate: text('next_service_date'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 
-export const rentals = sqliteTable('rentals', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  carId: integer('car_id')
-    .notNull()
-    .unique()
-    .references(() => cars.id, { onDelete: 'cascade' }),
-  renterName: text('renter_name').notNull(),
-  rateAmount: integer('rate_amount').notNull(),
-  periodicity: text('periodicity', { enum: ['daily', 'weekly', 'monthly'] })
-    .$type<RentalPeriodicity>()
-    .notNull(),
-  startDate: text('start_date').notNull(),
-  active: integer('active', { mode: 'boolean' }).notNull().default(true),
-});
+export const carDocuments = sqliteTable(
+  'car_documents',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    carId: integer('car_id')
+      .notNull()
+      .references(() => cars.id, { onDelete: 'cascade' }),
+    type: text('type', { enum: CAR_DOCUMENT_TYPES }).$type<CarDocumentType>().notNull(),
+    expiresAt: text('expires_at').notNull(),
+    policyNumber: text('policy_number'),
+    notes: text('notes'),
+  },
+  (table) => [uniqueIndex('car_documents_car_type_idx').on(table.carId, table.type)],
+);
+
+export const rentals = sqliteTable(
+  'rentals',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    carId: integer('car_id')
+      .notNull()
+      .references(() => cars.id, { onDelete: 'cascade' }),
+    driverId: integer('driver_id').references(() => drivers.id, { onDelete: 'set null' }),
+    renterName: text('renter_name').notNull(),
+    rateAmount: integer('rate_amount').notNull(),
+    periodicity: text('periodicity', { enum: ['daily', 'weekly', 'monthly'] })
+      .$type<RentalPeriodicity>()
+      .notNull(),
+    startDate: text('start_date').notNull(),
+    endDate: text('end_date'),
+    active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  },
+  (table) => [uniqueIndex('rentals_active_car_unique').on(table.carId).where(sql`active = 1`)],
+);
 
 export const rentalPayments = sqliteTable(
   'rental_payments',
@@ -67,6 +103,7 @@ export const fines = sqliteTable('fines', {
   carId: integer('car_id')
     .notNull()
     .references(() => cars.id, { onDelete: 'cascade' }),
+  driverId: integer('driver_id').references(() => drivers.id, { onDelete: 'set null' }),
   resolutionNumber: text('resolution_number').notNull().unique(),
   violatedAt: text('violated_at').notNull(),
   amount: integer('amount').notNull(),
@@ -102,7 +139,9 @@ export const maintenanceParts = sqliteTable('maintenance_parts', {
 });
 
 export type UserRow = typeof users.$inferSelect;
+export type DriverRow = typeof drivers.$inferSelect;
 export type CarRow = typeof cars.$inferSelect;
+export type CarDocumentRow = typeof carDocuments.$inferSelect;
 export type RentalRow = typeof rentals.$inferSelect;
 export type RentalPaymentRow = typeof rentalPayments.$inferSelect;
 export type FineRow = typeof fines.$inferSelect;
