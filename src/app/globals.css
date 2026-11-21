@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+:root[data-theme="light"] {
+  --bg-canvas: #f5f4f0;
+  --bg-surface: #ffffff;
+  --bg-elevated: #eceae4;
+
+  --text-primary: #18191b;
+  --text-secondary: #525660;
+  --text-muted: #666a73;
+
+  --border-subtle: #dfddd5;
+  --border-strong: #c2bfb5;
+
+  --accent: #1e2430;
+  --accent-fg: #ffffff;
+  --accent-hover: #2e3748;
+
+  --status-overdue: #facc15;
+  --status-overdue-bg: #fef9c3;
+  --status-overdue-border: #ca8a04;
+  --status-overdue-text: #713f12;
+
+  --status-rent-bg: #e8f5ee;
+  --status-rent-border: #b4dec6;
+  --status-rent-text: #135d38;
+  --status-rent-dot: #1a8754;
+
+  --status-repair-bg: #fdeceb;
+  --status-repair-border: #f2bdb9;
+  --status-repair-text: #8f221b;
+  --status-repair-dot: #c9352b;
+
+  --status-available-bg: #eceff3;
+  --status-available-border: #cdd3dd;
+  --status-available-text: #363e4d;
+  --status-available-dot: #647084;
+
+  --status-danger: #c9352b;
+  --status-success: #157347;
+  --focus-ring: #1e2430;
+}
+
+:root[data-theme="dark"] {
+  --bg-canvas: #111317;
+  --bg-surface: #181b21;
+  --bg-elevated: #20242c;
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #a1a7b3;
+  --text-muted: #8c93a0;
+
+  --border-subtle: #2a2f3a;
+  --border-strong: #3e4554;
+
+  --accent: #f3f4f6;
+  --accent-fg: #111317;
+  --accent-hover: #e2e5ea;
+
+  --status-overdue: #facc15;
+  --status-overdue-bg: #3a2d0b;
+  --status-overdue-border: #ca8a04;
+  --status-overdue-text: #fde047;
+
+  --status-rent-bg: #11281d;
+  --status-rent-border: #22543b;
+  --status-rent-text: #7ae2a8;
+  --status-rent-dot: #34d399;
+
+  --status-repair-bg: #2d1416;
+  --status-repair-border: #63262a;
+  --status-repair-text: #fca5a5;
+  --status-repair-dot: #f87171;
+
+  --status-available-bg: #1f242d;
+  --status-available-border: #353d4b;
+  --status-available-text: #cbd5e1;
+  --status-available-dot: #94a3b8;
+
+  --status-danger: #f87171;
+  --status-success: #4ade80;
+  --focus-ring: #facc15;
+}
+
+@layer base {
+  html {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Roboto", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100dvh;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+  }
+
+  ::selection {
+    background-color: var(--status-overdue);
+    color: #18191b;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
