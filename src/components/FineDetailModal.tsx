@@ -61,11 +61,9 @@ export function FineDetailModal({ fine, onClose }: { fine: FineDto; onClose: () 
                   >
                     Скидка истекла
                   </span>
-                  {fine.discountDeadline && (
-                    <span className="text-xs text-[var(--text-secondary)] tabular-nums">
-                      Действовала до {formatDateRu(fine.discountDeadline)}
-                    </span>
-                  )}
+                  <span className="text-xs text-[var(--text-secondary)] tabular-nums">
+                    Действовала до {formatDateRu(discountMeta.deadline)}
+                  </span>
                 </span>
               )}
 
@@ -81,7 +79,7 @@ export function FineDetailModal({ fine, onClose }: { fine: FineDto; onClose: () 
                   )}
                   <span className="text-xs text-[var(--text-secondary)] tabular-nums">
                     {fine.discountAmount !== null ? 'до' : 'Действует до'}{' '}
-                    {formatDateRu(fine.discountDeadline!)}
+                    {formatDateRu(discountMeta.deadline)}
                     {discountMeta.daysLeft === 0
                       ? ' (сегодня последний день)'
                       : ` (осталось ${discountMeta.daysLeft} дн.)`}

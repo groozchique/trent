@@ -1,3 +1,4 @@
+import { scryptSync } from 'node:crypto';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createDb, type AppDb } from '@/db';
@@ -54,6 +55,11 @@ describe('password hashing and sessions', () => {
     expect(verifyPassword('secret123', 'malformed')).toBe(false);
     expect(verifyPassword('secret123', 'salt:abc')).toBe(false);
     expect(verifyPassword('secret123', 'salt:not-hex!')).toBe(false);
+    expect(verifyPassword('secret123', 'salt:aabb')).toBe(false);
+    expect(verifyPassword('secret123', `salt:${'a'.repeat(126)}`)).toBe(false);
+    expect(verifyPassword('secret123', `salt:${'a'.repeat(130)}`)).toBe(false);
+    const shortDigest = scryptSync('secret123', 'salt', 2).toString('hex');
+    expect(verifyPassword('secret123', `salt:${shortDigest}`)).toBe(false);
   });
 
   it('verifies seeded admin123 and viewer123 password hashes', async () => {

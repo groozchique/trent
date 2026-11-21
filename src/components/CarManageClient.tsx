@@ -23,7 +23,7 @@ import {
   type MaintenanceDto,
   type RentalDto,
 } from '@/lib/validation';
-import { BrandIcon } from './BrandIcon';
+import { BrandIcon, KNOWN_BRANDS } from './BrandIcon';
 import { FineStatusPill } from './FinesListModal';
 import { StatusBadge } from './StatusBadge';
 
@@ -46,18 +46,6 @@ const PERIODICITY_OPTIONS: Array<{ value: RentalPeriodicity; label: string }> = 
   { value: 'daily', label: 'Ежедневно' },
   { value: 'weekly', label: 'Еженедельно' },
   { value: 'monthly', label: 'Ежемесячно' },
-];
-
-const KNOWN_BRANDS = [
-  'Kia',
-  'Hyundai',
-  'Skoda',
-  'Volkswagen',
-  'Toyota',
-  'Lada',
-  'Geely',
-  'Chery',
-  'Haval',
 ];
 
 const INPUT_CLASS =
@@ -140,6 +128,7 @@ function GeneralInfoTab({
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     setPlate(car.plate);
@@ -189,24 +178,21 @@ function GeneralInfoTab({
       await onCarUpdated((prev) =>
         data.car ? { ...prev, ...data.car } : { ...prev, ...parsed.data },
       );
-      setFeedback({ kind: 'success', message: 'Данные автомобиля сохранены' });
+      setFeedback({ kind: 'success', message: 'Изменения сохранены' });
     } catch {
-      setFeedback({ kind: 'error', message: 'Не удалось сохранить изменения. Проверьте подключение' });
+      setFeedback({ kind: 'error', message: 'Не удалось сохранить изменения. Проверьте сеть' });
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete() {
-    setFeedback(null);
+    setDeleteError(null);
     setDeleting(true);
     try {
       const response = await fetch(`/api/cars/${car.id}`, { method: 'DELETE' });
       if (!response.ok) {
-        setFeedback({
-          kind: 'error',
-          message: await readApiError(response, 'Не удалось удалить автомобиль'),
-        });
+        setDeleteError(await readApiError(response, 'Не удалось удалить автомобиль'));
         setDeleting(false);
         return;
       }
@@ -214,7 +200,7 @@ function GeneralInfoTab({
       router.push('/');
       router.refresh();
     } catch {
-      setFeedback({ kind: 'error', message: 'Не удалось удалить автомобиль. Проверьте подключение' });
+      setDeleteError('Не удалось удалить машину. Проверьте сеть');
       setDeleting(false);
     }
   }
@@ -225,7 +211,7 @@ function GeneralInfoTab({
     <div className="space-y-6">
       <form onSubmit={handleSave} noValidate className="space-y-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">
-          Основные параметры
+          Основные данные
         </h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -267,7 +253,7 @@ function GeneralInfoTab({
 
           <div>
             <label htmlFor="manage-car-brand" className={LABEL_CLASS}>
-              Бренд
+              Марка
             </label>
             <input
               id="manage-car-brand"
@@ -332,16 +318,15 @@ function GeneralInfoTab({
       </form>
 
       <section
-        aria-label="Удаление автомобиля"
+        aria-label="Удаление машины"
         className="space-y-3 border-t border-[var(--border-subtle)] pt-5"
       >
         <div>
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-            Удаление автомобиля
+            Удаление машины
           </h3>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Автомобиль и связанные записи по аренде, штрафам и ТО будут удалены без возможности
-            восстановления.
+            Машина и все записи по аренде, штрафам и ТО удалятся навсегда.
           </p>
         </div>
 
@@ -349,7 +334,10 @@ function GeneralInfoTab({
           <button
             type="button"
             disabled={busy}
-            onClick={() => setConfirmDelete(true)}
+            onClick={() => {
+              setDeleteError(null);
+              setConfirmDelete(true);
+            }}
             style={{
               backgroundColor: 'var(--status-repair-bg)',
               borderColor: 'var(--status-repair-border)',
@@ -358,7 +346,7 @@ function GeneralInfoTab({
             className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 text-sm font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Удалить автомобиль</span>
+            <span>Удалить машину</span>
           </button>
         ) : (
           <div
@@ -372,13 +360,19 @@ function GeneralInfoTab({
               style={{ color: 'var(--status-repair-text)' }}
               className="text-xs font-medium sm:text-sm"
             >
-              Подтвердите удаление автомобиля {car.plate}. Это действие необратимо.
+              Удалить {car.plate}? Отменить это нельзя.
             </p>
+            <FeedbackBanner
+              feedback={deleteError ? { kind: 'error', message: deleteError } : null}
+            />
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 disabled={deleting}
-                onClick={() => setConfirmDelete(false)}
+                onClick={() => {
+                  setDeleteError(null);
+                  setConfirmDelete(false);
+                }}
                 className={SECONDARY_BTN_CLASS}
               >
                 Отмена
@@ -395,7 +389,7 @@ function GeneralInfoTab({
                 }}
                 className="inline-flex h-10 cursor-pointer items-center justify-center rounded-lg px-4 text-sm font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {deleting ? 'Удаление...' : 'Подтвердить удаление'}
+                {deleting ? 'Удаление...' : 'Да, удалить'}
               </button>
             </div>
           </div>
@@ -421,6 +415,10 @@ function MaintenanceTab({
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
+
+  useEffect(() => {
+    setMileage(String(car.mileage));
+  }, [car.id, car.mileage]);
 
   const partsSum = parts.reduce(
     (sum, part) => sum + toPreviewInt(part.quantity) * toPreviewInt(part.unitPrice),
@@ -500,7 +498,7 @@ function MaintenanceTab({
       setMileage(String(Math.max(car.mileage, parsed.data.mileage)));
       setFeedback({ kind: 'success', message: 'Запись ТО добавлена' });
     } catch {
-      setFeedback({ kind: 'error', message: 'Не удалось сохранить запись ТО. Проверьте подключение' });
+      setFeedback({ kind: 'error', message: 'Не удалось сохранить запись ТО. Проверьте сеть' });
     } finally {
       setSubmitting(false);
     }
@@ -510,7 +508,7 @@ function MaintenanceTab({
     <div className="space-y-6">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">
-          Новая запись о ТО и ремонте
+          Новое ТО или ремонт
         </h2>
 
         <div>
@@ -532,7 +530,7 @@ function MaintenanceTab({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="maint-date" className={LABEL_CLASS}>
-              Дата проведения
+              Дата
             </label>
             <input
               id="maint-date"
@@ -582,7 +580,7 @@ function MaintenanceTab({
 
           {parts.length === 0 ? (
             <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-center text-xs text-[var(--text-secondary)]">
-              Запчасти не добавлены — можно сохранить только стоимость работ.
+              Запчасти не добавлены. Можно сохранить только стоимость работ
             </p>
           ) : (
             <ul className="space-y-2.5">
@@ -753,16 +751,16 @@ function MaintenanceTab({
         </h3>
         {car.maintenance.length === 0 ? (
           <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-center text-xs text-[var(--text-secondary)]">
-            Записей о ТО пока нет
+            Записей пока нет
           </p>
         ) : (
           <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
             {car.maintenance.map((record) => (
               <li
                 key={record.id}
-                className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-sm"
+                className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-[var(--text-primary)]">{record.title}</p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--text-secondary)] tabular-nums">
                     <span>{formatDateRu(record.performedAt)}</span>
@@ -802,14 +800,26 @@ function RentalTab({
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
 
+  const rentalRenterName = car.rental?.renterName;
+  const rentalRateAmount = car.rental?.rateAmount;
+  const rentalPeriodicity = car.rental?.periodicity;
+  const rentalStartDate = car.rental?.startDate;
+  const rentalActive = car.rental?.active;
+
   useEffect(() => {
-    if (!car.rental) return;
-    setRenterName(car.rental.renterName);
-    setRateAmount(String(car.rental.rateAmount));
-    setPeriodicity(car.rental.periodicity);
-    setStartDate(car.rental.startDate);
-    setActive(car.rental.active);
-  }, [car.rental]);
+    setRenterName(rentalRenterName ?? '');
+    setRateAmount(rentalRateAmount !== undefined ? String(rentalRateAmount) : '');
+    setPeriodicity(rentalPeriodicity ?? 'daily');
+    setStartDate(rentalStartDate ?? new Date().toISOString().slice(0, 10));
+    setActive(rentalActive ?? true);
+  }, [
+    car.id,
+    rentalRenterName,
+    rentalRateAmount,
+    rentalPeriodicity,
+    rentalStartDate,
+    rentalActive,
+  ]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -854,7 +864,7 @@ function RentalTab({
       }));
       setFeedback({ kind: 'success', message: 'Настройки аренды сохранены' });
     } catch {
-      setFeedback({ kind: 'error', message: 'Не удалось сохранить аренду. Проверьте подключение' });
+      setFeedback({ kind: 'error', message: 'Не удалось сохранить аренду. Проверьте сеть' });
     } finally {
       setSubmitting(false);
     }
@@ -863,7 +873,7 @@ function RentalTab({
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <h2 className="text-base font-semibold text-[var(--text-primary)]">
-        Параметры аренды
+        Условия аренды
       </h2>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1008,7 +1018,7 @@ function FinesTab({
     } catch {
       setSyncFeedback({
         kind: 'error',
-        message: 'Не удалось выполнить синхронизацию. Проверьте подключение',
+        message: 'Не удалось синхронизировать штрафы. Проверьте сеть',
       });
     } finally {
       setSyncing(false);
@@ -1073,7 +1083,7 @@ function FinesTab({
       setStatus('unpaid');
       setFormFeedback({ kind: 'success', message: 'Штраф добавлен' });
     } catch {
-      setFormFeedback({ kind: 'error', message: 'Не удалось добавить штраф. Проверьте подключение' });
+      setFormFeedback({ kind: 'error', message: 'Не удалось добавить штраф. Проверьте сеть' });
     } finally {
       setSubmitting(false);
     }
@@ -1090,7 +1100,7 @@ function FinesTab({
               Синхронизация штрафов
             </h2>
             <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-              Запросить актуальные постановления по номеру {car.plate}.
+              Проверить новые штрафы по номеру {car.plate}.
             </p>
           </div>
 
@@ -1272,7 +1282,7 @@ function FinesTab({
         </h3>
         {car.fines.length === 0 ? (
           <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-center text-xs text-[var(--text-secondary)]">
-            Штрафов по автомобилю нет
+            Штрафов нет
           </p>
         ) : (
           <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
@@ -1321,7 +1331,7 @@ export function CarManageClient({ car }: { car: CarDetailDto }) {
       setCarState(optimisticPatch);
     }
     try {
-      const response = await fetch(`/api/cars/${carState.id}`, { cache: 'no-store' });
+      const response = await fetch(`/api/cars/${car.id}`, { cache: 'no-store' });
       if (response.ok) {
         const data = (await response.json()) as { car?: CarDetailDto };
         if (data.car) {
@@ -1375,7 +1385,7 @@ export function CarManageClient({ car }: { car: CarDetailDto }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-0.5 font-mono text-xs font-bold tracking-tight text-[var(--text-primary)] tabular-nums sm:text-sm">
+            <span className="inline-flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-0.5 font-mono text-xs font-semibold tracking-tight text-[var(--text-primary)] tabular-nums sm:text-sm">
               {carState.plate}
             </span>
             <StatusBadge status={carState.status} />
@@ -1403,7 +1413,7 @@ export function CarManageClient({ car }: { car: CarDetailDto }) {
               role="tab"
               id={`manage-tab-${tab.id}`}
               aria-selected={isSelected}
-              aria-controls={`manage-panel-${tab.id}`}
+              aria-controls={isSelected ? `manage-panel-${tab.id}` : undefined}
               tabIndex={isSelected ? 0 : -1}
               onClick={() => setActiveTab(tab.id)}
               onKeyDown={(event) => handleTabKeyDown(event, index)}

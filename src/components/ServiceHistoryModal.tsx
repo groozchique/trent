@@ -24,7 +24,7 @@ export function ServiceHistoryModal({
     >
       {records.length === 0 ? (
         <p className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-6 text-center text-sm text-[var(--text-secondary)]">
-          Записей о ремонте и ТО пока нет
+          Ремонтов и ТО пока нет
         </p>
       ) : (
         <ul className="space-y-2">

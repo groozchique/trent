@@ -43,6 +43,9 @@ export async function PATCH(request: Request, context: RouteIdContext) {
     }
 
     const car = await getCarSummary(db, carId);
+    if (!car) {
+      return NextResponse.json({ error: 'Автомобиль не найден' }, { status: 404 });
+    }
     return NextResponse.json({ car });
   } catch (err) {
     return handleApiError(err);

@@ -4,23 +4,12 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import type { CarStatus } from '@/db/schema';
 import { createCarSchema } from '@/lib/validation';
+import { KNOWN_BRANDS } from './BrandIcon';
 
 const STATUS_OPTIONS: Array<{ value: CarStatus; label: string }> = [
   { value: 'available', label: 'Не в аренде' },
   { value: 'in_rent', label: 'В аренде' },
   { value: 'in_repair', label: 'На ремонте' },
-];
-
-const KNOWN_BRANDS = [
-  'Kia',
-  'Hyundai',
-  'Skoda',
-  'Volkswagen',
-  'Toyota',
-  'Lada',
-  'Geely',
-  'Chery',
-  'Haval',
 ];
 
 function AddCarModalBody({
@@ -89,14 +78,14 @@ function AddCarModalBody({
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(data?.error ?? 'Не удалось добавить автомобиль');
+        setError(data?.error ?? 'Не удалось добавить машину');
         return;
       }
 
       onCreated();
       onClose();
     } catch {
-      setError('Не удалось сохранить автомобиль. Проверьте подключение');
+      setError('Не удалось сохранить машину. Проверьте сеть');
     } finally {
       setSubmitting(false);
     }
@@ -116,14 +105,14 @@ function AddCarModalBody({
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-car-modal-title"
-        className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-xl sm:rounded-2xl sm:p-6"
+        className="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-lg sm:rounded-2xl sm:p-6"
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3.5">
           <h2
             id="add-car-modal-title"
-            className="text-lg font-semibold tracking-tight text-[var(--text-primary)]"
+            className="text-base font-semibold tracking-tight text-[var(--text-primary)] sm:text-lg"
           >
-            Новый автомобиль
+            Новая машина
           </h2>
           <button
             type="button"
@@ -163,7 +152,7 @@ function AddCarModalBody({
                 htmlFor="add-car-brand"
                 className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]"
               >
-                Бренд
+                Марка
               </label>
               <input
                 id="add-car-brand"

@@ -99,6 +99,7 @@ describe('DashboardClient', () => {
     expect(screen.getByText('Е789КХ 799')).toBeInTheDocument();
 
     const searchInput = screen.getByRole('searchbox');
+    expect(searchInput.className).toContain('appearance-none');
     fireEvent.change(searchInput, { target: { value: 'e789' } });
     // Cyrillic E vs Latin e: test exact Cyrillic query for plate and Latin for model
     expect(screen.queryByText('Е789КХ 799')).not.toBeInTheDocument();
@@ -112,7 +113,7 @@ describe('DashboardClient', () => {
     expect(screen.queryByText('Е789КХ 799')).not.toBeInTheDocument();
 
     fireEvent.change(searchInput, { target: { value: 'несуществующий' } });
-    expect(screen.getByText(/не найдены/i)).toBeInTheDocument();
+    expect(screen.getByText('По этим фильтрам машин нет')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Сбросить фильтры' }));
     expect(screen.getByText('А123ВС 777')).toBeInTheDocument();
     expect(screen.getByText('В456ОР 777')).toBeInTheDocument();
@@ -177,7 +178,7 @@ describe('DashboardClient', () => {
     fireEvent.change(within(dialog).getByLabelText('Гос. номер'), {
       target: { value: 'М321ТН 777' },
     });
-    fireEvent.change(within(dialog).getByLabelText('Бренд'), {
+    fireEvent.change(within(dialog).getByLabelText('Марка'), {
       target: { value: 'Geely' },
     });
     fireEvent.change(within(dialog).getByLabelText('Модель'), {
@@ -245,7 +246,7 @@ describe('AddCarModal', () => {
 
     // Negative mileage fails validation inline without calling fetch
     fireEvent.change(screen.getByLabelText('Гос. номер'), { target: { value: 'А123ВС 777' } });
-    fireEvent.change(screen.getByLabelText('Бренд'), { target: { value: 'Kia' } });
+    fireEvent.change(screen.getByLabelText('Марка'), { target: { value: 'Kia' } });
     fireEvent.change(screen.getByLabelText('Модель'), { target: { value: 'Rio' } });
     fireEvent.change(screen.getByLabelText(/Пробег/i), { target: { value: '-10' } });
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));

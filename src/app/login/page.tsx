@@ -24,26 +24,32 @@ export default function LoginPage() {
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(data?.error ?? 'Неверный логин или пароль');
+        const fallback =
+          response.status >= 500
+            ? 'Ошибка сервера. Попробуйте позже'
+            : 'Неверный логин или пароль';
+        setError(data?.error ?? fallback);
+        setSubmitting(false);
         return;
       }
 
       router.push('/');
       router.refresh();
     } catch {
-      setError('Не удалось выполнить вход. Проверьте подключение');
-    } finally {
+      setError('Не удалось войти. Проверьте сеть');
       setSubmitting(false);
     }
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-neutral-50 px-4 py-8 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
-      <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+    <main className="flex min-h-[calc(100dvh-3.5rem)] items-center justify-center bg-[var(--bg-canvas)] px-4 py-8 text-[var(--text-primary)]">
+      <div className="w-full max-w-sm rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold tracking-tight">Вход в систему</h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            Управление автопарком такси
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+            Вход
+          </h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            tRent, управление автопарком
           </p>
         </div>
 
@@ -51,7 +57,7 @@ export default function LoginPage() {
           <div>
             <label
               htmlFor="username"
-              className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300"
+              className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]"
             >
               Логин
             </label>
@@ -64,15 +70,15 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={submitting}
-              className="h-11 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/15 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-300 dark:focus:ring-neutral-300/15"
-              placeholder="admin"
+              className="h-11 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] disabled:opacity-60"
+              placeholder="Логин"
             />
           </div>
 
           <div>
             <label
               htmlFor="password"
-              className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300"
+              className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]"
             >
               Пароль
             </label>
@@ -85,7 +91,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
-              className="h-11 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:ring-2 focus:ring-neutral-900/15 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-300 dark:focus:ring-neutral-300/15"
+              className="h-11 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] disabled:opacity-60"
               placeholder="••••••••"
             />
           </div>
@@ -93,7 +99,12 @@ export default function LoginPage() {
           {error && (
             <p
               role="alert"
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-300"
+              style={{
+                backgroundColor: 'var(--status-repair-bg)',
+                borderColor: 'var(--status-repair-border)',
+                color: 'var(--status-repair-text)',
+              }}
+              className="rounded-lg border px-3 py-2 text-xs font-medium sm:text-sm"
             >
               {error}
             </p>
@@ -102,7 +113,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="h-11 w-full cursor-pointer rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white transition hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-900/30 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200 dark:focus:ring-neutral-100/30"
+            className="inline-flex h-11 w-full cursor-pointer items-center justify-center rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? 'Вход...' : 'Войти'}
           </button>

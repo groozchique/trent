@@ -14,7 +14,6 @@ export function ModalShell({
   closeDisabled = false,
   maxWidthClass = 'max-w-lg',
   zIndexClass = 'z-50',
-  backdropTestId,
   children,
 }: {
   title: ReactNode;
@@ -23,7 +22,6 @@ export function ModalShell({
   closeDisabled?: boolean;
   maxWidthClass?: string;
   zIndexClass?: string;
-  backdropTestId?: string;
   children: ReactNode;
 }) {
   const modalId = useId();
@@ -69,7 +67,6 @@ export function ModalShell({
 
   return (
     <div
-      data-testid={backdropTestId}
       onClick={(event) => {
         if (event.target === event.currentTarget && !closeDisabled) {
           onClose();
@@ -83,7 +80,7 @@ export function ModalShell({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`max-h-[90dvh] w-full ${maxWidthClass} overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-xl focus:outline-none sm:rounded-2xl sm:p-6`}
+        className={`max-h-[90dvh] w-full ${maxWidthClass} overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-lg focus:outline-none sm:rounded-2xl sm:p-6`}
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] pb-3.5">
           <div className="min-w-0 flex-1">

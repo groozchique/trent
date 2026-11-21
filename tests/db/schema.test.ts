@@ -48,6 +48,10 @@ describe('database schema and seed', () => {
       new Set(['in_rent', 'in_repair', 'available']),
     );
     expect(allFines.length).toBeGreaterThanOrEqual(4);
+    const madiFine = allFines.find((f) => f.resolutionNumber === '18810177261100003001');
+    expect(madiFine).toBeDefined();
+    expect(madiFine?.discountAmount).toBeNull();
+    expect(madiFine?.discountDeadline).toBeNull();
     expect(allRentals.length).toBeGreaterThan(0);
     expect(allPayments.length).toBeGreaterThan(0);
     expect(allMaint.length).toBeGreaterThan(0);

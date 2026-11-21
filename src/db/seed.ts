@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { randomBytes, scryptSync } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
+import { hashPassword } from '../lib/auth/password';
 import type { AppDb } from './index';
 import {
   cars,
@@ -12,12 +12,6 @@ import {
   rentals,
   users,
 } from './schema';
-
-function hashPassword(plain: string): string {
-  const saltHex = randomBytes(16).toString('hex');
-  const hashHex = scryptSync(plain, saltHex, 64).toString('hex');
-  return `${saltHex}:${hashHex}`;
-}
 
 function isoDateOffset(baseUtcMs: number, daysOffset: number): string {
   return new Date(baseUtcMs + daysOffset * 86_400_000).toISOString().slice(0, 10);
@@ -178,7 +172,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
         violatedAt: `${isoDateOffset(baseUtcMs, -30)}T21:12:00+03:00`,
         amount: 5000,
         discountAmount: null,
-        discountDeadline: isoDateOffset(baseUtcMs, -8),
+        discountDeadline: null,
         paymentDeadline: isoDateOffset(baseUtcMs, 30),
         description: 'Парковка на месте для инвалидов / платная парковка (МАДИ)',
         status: 'unpaid',

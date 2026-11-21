@@ -13,23 +13,15 @@ import {
 import { AuthError } from '@/lib/auth/session';
 import { buildRentalTimeline } from '@/lib/rental/timeline';
 import {
+  ApiError,
   parsePositiveIntId,
   type CarDetailDto,
   type CarSummaryDto,
   type MaintenancePartDto,
 } from '@/lib/validation';
 
+export { ApiError };
 export type RouteIdContext = { params: Promise<{ id: string }> };
-
-export class ApiError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
-}
 
 /** Extract and validate `[id]` route parameter as a positive integer. */
 export async function parseCarIdParam(context: RouteIdContext): Promise<number> {
@@ -46,7 +38,7 @@ function getUniqueConstraintMessage(err: unknown): string | null {
     | { code?: unknown; message?: unknown; cause?: { code?: unknown; message?: unknown } }
     | null;
   const code = record?.code ?? record?.cause?.code;
-  const message = String(record?.message ?? record?.cause?.message ?? '');
+  const message = `${String(record?.message ?? '')} ${String(record?.cause?.message ?? '')}`;
   if (code === 'SQLITE_CONSTRAINT_UNIQUE' || message.includes('UNIQUE constraint failed')) {
     if (message.includes('cars.plate')) {
       return 'Автомобиль с таким гос. номером уже существует';
@@ -59,7 +51,7 @@ function getUniqueConstraintMessage(err: unknown): string | null {
   return null;
 }
 
-/** Map AuthError, ZodError, malformed JSON, and SQLite conflicts to Russian JSON responses. */
+/** Map AuthError, ApiError, ZodError, and SQLite conflicts to Russian JSON responses. */
 export function handleApiError(err: unknown): NextResponse {
   if (err instanceof AuthError || err instanceof ApiError) {
     return NextResponse.json({ error: err.message }, { status: err.status });
@@ -69,9 +61,6 @@ export function handleApiError(err: unknown): NextResponse {
       { error: err.issues[0]?.message ?? 'Некорректные данные' },
       { status: 400 },
     );
-  }
-  if (err instanceof SyntaxError) {
-    return NextResponse.json({ error: 'Некорректный формат запроса' }, { status: 400 });
   }
   const uniqueMessage = getUniqueConstraintMessage(err);
   if (uniqueMessage !== null) {

@@ -52,9 +52,14 @@ export function getDiscountState(
   discountDeadline: string | null,
   todayIso: string,
 ): { active: boolean; daysLeft: number } {
-  if (discountDeadline === null || todayIso > discountDeadline) {
+  if (discountDeadline === null) {
     return { active: false, daysLeft: 0 };
   }
-  const daysLeft = Math.round((parseUtcDateMs(discountDeadline) - parseUtcDateMs(todayIso)) / DAY_MS);
-  return { active: true, daysLeft: Math.max(0, daysLeft) };
+  const deadlineMs = parseUtcDateMs(discountDeadline);
+  const todayMs = parseUtcDateMs(todayIso);
+  if (Number.isNaN(deadlineMs) || Number.isNaN(todayMs) || todayMs > deadlineMs) {
+    return { active: false, daysLeft: 0 };
+  }
+  const daysLeft = Math.round((deadlineMs - todayMs) / DAY_MS);
+  return { active: true, daysLeft };
 }

@@ -1,5 +1,17 @@
 import type { ReactNode } from 'react';
 
+export const KNOWN_BRANDS = [
+  'Kia',
+  'Hyundai',
+  'Skoda',
+  'Volkswagen',
+  'Toyota',
+  'Lada',
+  'Geely',
+  'Chery',
+  'Haval',
+] as const;
+
 type KnownBrand =
   | 'kia'
   | 'hyundai'

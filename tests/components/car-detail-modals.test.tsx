@@ -350,6 +350,57 @@ describe('CarDetailModal and nested modals', () => {
     });
   });
 
+  it('prevents closing RentalTimelineModal via Escape or backdrop while payment toggle is in flight', async () => {
+    let resolveFetch!: (value: unknown) => void;
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onClose = vi.fn();
+
+    render(
+      <RentalTimelineModal
+        carId={1}
+        rental={SAMPLE_RENTAL}
+        timeline={SAMPLE_TIMELINE}
+        userRole="admin"
+        onClose={onClose}
+        onUpdated={vi.fn()}
+      />,
+    );
+
+    const payButtons = screen.getAllByRole('button', { name: 'Отметить оплату' });
+    fireEvent.click(payButtons[0]);
+
+    const closeBtn = screen.getByRole('button', { name: 'Закрыть' });
+    expect(closeBtn).toBeDisabled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+
+    resolveFetch({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        payment: {
+          id: 99,
+          rentalId: 10,
+          dueDate: '2026-11-11',
+          amount: 2400,
+          paidAt: '2026-11-21T12:00:00Z',
+        },
+      }),
+    });
+
+    await waitFor(() => {
+      expect(closeBtn).not.toBeDisabled();
+    });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('opens ServiceHistoryModal and ServiceDetailModal showing date, mileage, parts with SKU and "—" when omitted, and total sum', () => {
     const onSelectRecord = vi.fn();
     const { rerender } = render(
@@ -484,7 +535,7 @@ describe('CarDetailModal and nested modals', () => {
         onUpdated={vi.fn()}
       />,
     );
-    expect(screen.getByText('Аренда для этого автомобиля не настроена')).toBeInTheDocument();
+    expect(screen.getByText('Аренда для этой машины не настроена')).toBeInTheDocument();
     unmount();
 
     stubCarDetailFetch();

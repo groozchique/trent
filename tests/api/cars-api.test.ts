@@ -4,6 +4,8 @@ import type { AppDb } from '@/db';
 import { cars, fines, maintenanceParts, maintenanceRecords, rentalPayments, rentals, users } from '@/db/schema';
 import { seedDatabase } from '@/db/seed';
 import { SESSION_COOKIE_NAME, createSession } from '@/lib/auth/session';
+import { handleApiError } from '@/lib/cars';
+import { createCarSchema, updateCarSchema, upsertRentalSchema } from '@/lib/validation';
 import { GET as listCarsGet, POST as createCarPost } from '@/app/api/cars/route';
 import {
   DELETE as deleteCarDelete,
@@ -203,12 +205,37 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
       .values({ plate: 'Е111КХ 777', brand: 'Kia', model: 'Rio', status: 'available', mileage: 1000 })
       .returning();
 
-    const emptyPatch = await updateCarPatch(jsonReq('http://localhost/api/cars/1', 'PATCH', {}), idCtx(car.id));
-    expect(emptyPatch.status).toBe(400);
+    const badPatchPayloads = [
+      null,
+      {},
+      { plate: 123 },
+      { brand: 123 },
+      { model: 123 },
+      { status: 'broken' },
+      { mileage: 'abc' },
+    ];
+    for (const payload of badPatchPayloads) {
+      const res = await updateCarPatch(jsonReq('http://localhost/api/cars/1', 'PATCH', payload), idCtx(car.id));
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/[А-Яа-яЁё]/);
+      expect(body.error).not.toMatch(/invalid input|expected/i);
+    }
 
     const badMaintPayloads = [
+      null,
+      {},
+      { title: 123, performedAt: '2026-11-20', mileage: 1000, laborCost: 500 },
+      { title: 'ТО', performedAt: 123, mileage: 1000, laborCost: 500 },
       { title: 'ТО', performedAt: '2026-02-31', mileage: 1000, laborCost: 500, parts: [] },
+      { title: 'ТО', performedAt: '2026-11-20', mileage: 'abc', laborCost: 500 },
+      { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 'abc' },
+      { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 500, notes: 123 },
       { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 500, parts: 'bad' },
+      { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 500, parts: [null] },
+      { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 500, parts: [{ name: 123, unitPrice: 100 }] },
+      { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 500, parts: [{ name: 'Фильтр', sku: 123, unitPrice: 100 }] },
+      { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 500, parts: [{ name: 'Фильтр', quantity: 'x', unitPrice: 100 }] },
       { title: 'ТО', performedAt: '2026-11-20', mileage: 1000, laborCost: 500, parts: [{ name: 'Фильтр', unitPrice: 'x' }] },
     ];
     for (const payload of badMaintPayloads) {
@@ -222,17 +249,80 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
       expect(body.error).not.toMatch(/invalid input|expected/i);
     }
 
-    const badPayment = await togglePaymentPost(
-      jsonReq('http://localhost/api/cars/1/rental/payments', 'POST', {
-        dueDate: '2026-11-01',
-        paid: 'yes',
-      }),
-      idCtx(car.id),
-    );
-    expect(badPayment.status).toBe(400);
-    const badPaymentBody = (await badPayment.json()) as { error: string };
-    expect(badPaymentBody.error).toMatch(/[А-Яа-яЁё]/);
-    expect(badPaymentBody.error).not.toMatch(/invalid input|expected/i);
+    const badRentalPayloads = [
+      null,
+      {},
+      { renterName: 123, rateAmount: 2000, periodicity: 'daily', startDate: '2026-11-10' },
+      { renterName: 'Иванов', rateAmount: 'abc', periodicity: 'daily', startDate: '2026-11-10' },
+      { renterName: 'Иванов', rateAmount: null, periodicity: 'daily', startDate: '2026-11-10' },
+      { renterName: 'Иванов', rateAmount: 2000, periodicity: 'yearly', startDate: '2026-11-10' },
+      { renterName: 'Иванов', rateAmount: 2000, periodicity: 'daily', startDate: 123 },
+      { renterName: 'Иванов', rateAmount: 2000, periodicity: 'daily', startDate: '2026-11-10', active: 'yes' },
+    ];
+    for (const payload of badRentalPayloads) {
+      const res = await upsertRentalPut(
+        jsonReq('http://localhost/api/cars/1/rental', 'PUT', payload),
+        idCtx(car.id),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/[А-Яа-яЁё]/);
+      expect(body.error).not.toMatch(/invalid input|expected/i);
+    }
+
+    const badFinePayloads = [
+      null,
+      {},
+      { resolutionNumber: 123, violatedAt: '2026-11-10', amount: 500, paymentDeadline: '2026-12-10', description: 'd' },
+      { resolutionNumber: '1', violatedAt: 123, amount: 500, paymentDeadline: '2026-12-10', description: 'd' },
+      { resolutionNumber: '1', violatedAt: '2026-11-10', amount: '500', paymentDeadline: '2026-12-10', description: 'd' },
+      { resolutionNumber: '1', violatedAt: '2026-11-10', amount: 500, discountAmount: '100', paymentDeadline: '2026-12-10', description: 'd' },
+      { resolutionNumber: '1', violatedAt: '2026-11-10', amount: 500, discountDeadline: 123, paymentDeadline: '2026-12-10', description: 'd' },
+      { resolutionNumber: '1', violatedAt: '2026-11-10', amount: 500, paymentDeadline: 123, description: 'd' },
+      { resolutionNumber: '1', violatedAt: '2026-11-10', amount: 500, paymentDeadline: '2026-12-10', description: 123 },
+      { resolutionNumber: '1', violatedAt: '2026-11-10', amount: 500, paymentDeadline: '2026-12-10', description: 'd', status: 'pending' },
+    ];
+    for (const payload of badFinePayloads) {
+      const res = await createFinePost(
+        jsonReq('http://localhost/api/cars/1/fines', 'POST', payload),
+        idCtx(car.id),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/[А-Яа-яЁё]/);
+      expect(body.error).not.toMatch(/invalid input|expected/i);
+    }
+
+    const badPaymentPayloads = [
+      null,
+      {},
+      { dueDate: 123, paid: true },
+      { dueDate: '2026-11-01', paid: 'yes' },
+      { dueDate: '2026-11-01', paid: true, amount: 'abc' },
+    ];
+    for (const payload of badPaymentPayloads) {
+      const res = await togglePaymentPost(
+        jsonReq('http://localhost/api/cars/1/rental/payments', 'POST', payload),
+        idCtx(car.id),
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/[А-Яа-яЁё]/);
+      expect(body.error).not.toMatch(/invalid input|expected/i);
+    }
+
+    for (const nanCheck of [
+      createCarSchema.safeParse({ plate: 'А123ВС 777', brand: 'Kia', model: 'Rio', status: 'available', mileage: Number.NaN }),
+      updateCarSchema.safeParse({ mileage: Number.NaN }),
+      upsertRentalSchema.safeParse({ renterName: 'Иванов', rateAmount: Number.NaN, periodicity: 'daily', startDate: '2026-11-10' }),
+    ]) {
+      expect(nanCheck.success).toBe(false);
+      if (!nanCheck.success) {
+        const msg = nanCheck.error.issues[0]?.message ?? '';
+        expect(msg).toMatch(/[А-Яа-яЁё]/);
+        expect(msg).not.toMatch(/invalid input|expected/i);
+      }
+    }
   });
 
   it('creates, lists, updates, and deletes cars with 404/409 handling and unpaidFinesCount', async () => {
@@ -268,7 +358,9 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
       }),
     );
     expect(dupRes.status).toBe(409);
-    expect(((await dupRes.json()) as { error: string }).error).toMatch(/[А-Яа-яЁё]/);
+    expect(((await dupRes.json()) as { error: string }).error).toBe(
+      'Автомобиль с таким гос. номером уже существует',
+    );
 
     const secondRes = await createCarPost(
       jsonReq('http://localhost/api/cars', 'POST', {
@@ -417,6 +509,12 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
       idCtx(car.id),
     );
     expect(dupFineRes.status).toBe(409);
+    expect(((await dupFineRes.json()) as { error: string }).error).toBe(
+      'Штраф с таким номером постановления уже существует',
+    );
+
+    const internalSyntaxRes = handleApiError(new SyntaxError('unexpected internal parse failure'));
+    expect(internalSyntaxRes.status).toBe(500);
 
     const sync1 = await syncFinesPost(new Request('http://localhost/api/cars/1/fines/sync', { method: 'POST' }), idCtx(car.id));
     expect(sync1.status).toBe(200);

@@ -57,10 +57,10 @@ export function ServiceDetailModal({
               <table className="w-full border-collapse text-left text-xs sm:text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border-subtle)] text-[var(--text-secondary)]">
-                    <th className="px-2.5 py-2 font-medium sm:px-3">Название</th>
-                    <th className="px-2.5 py-2 font-medium sm:px-3">Артикул</th>
-                    <th className="px-2.5 py-2 text-right font-medium sm:px-3">Кол-во</th>
-                    <th className="px-2.5 py-2 text-right font-medium sm:px-3">Цена</th>
+                    <th className="px-2.5 py-2 font-medium whitespace-nowrap sm:px-3">Название</th>
+                    <th className="px-2.5 py-2 font-medium whitespace-nowrap sm:px-3">Артикул</th>
+                    <th className="px-2.5 py-2 text-right font-medium whitespace-nowrap sm:px-3">Кол-во</th>
+                    <th className="px-2.5 py-2 text-right font-medium whitespace-nowrap sm:px-3">Цена</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-subtle)]">

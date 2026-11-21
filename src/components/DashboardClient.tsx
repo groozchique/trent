@@ -159,7 +159,7 @@ export function DashboardClient({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Номер, марка или модель"
             aria-label="Поиск по номеру, марке или модели"
-            className="h-9 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] pr-8 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)]"
+            className="h-9 w-full appearance-none rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] pr-8 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query && (
             <button
@@ -177,18 +177,18 @@ export function DashboardClient({
       {cars.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-10 text-center">
           <p className="text-sm font-medium text-[var(--text-primary)]">
-            В автопарке пока нет автомобилей
+            Машин пока нет
           </p>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
             {userRole === 'admin'
-              ? 'Нажмите «Добавить машину», чтобы завести первый автомобиль и начать учёт аренды, штрафов и ТО.'
-              : 'Обратитесь к администратору для добавления автомобилей.'}
+              ? 'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, штрафы и ТО.'
+              : 'Попросите администратора добавить машины.'}
           </p>
         </div>
       ) : filteredCars.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-10 text-center">
           <p className="text-sm font-medium text-[var(--text-primary)]">
-            Автомобили по выбранным фильтрам не найдены
+            По этим фильтрам машин нет
           </p>
           <button
             type="button"

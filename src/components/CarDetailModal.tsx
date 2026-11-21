@@ -60,7 +60,7 @@ export function CarDetailModal({
 
         if (!response.ok) {
           const data = (await response.json().catch(() => null)) as { error?: string } | null;
-          setError(data?.error ?? 'Не удалось загрузить данные автомобиля');
+          setError(data?.error ?? 'Не удалось загрузить карточку машины');
           return;
         }
 
@@ -68,14 +68,14 @@ export function CarDetailModal({
         if (controller.signal.aborted) return;
 
         if (!data.car) {
-          setError('Данные автомобиля не получены');
+          setError('Карточка не загрузилась');
           return;
         }
 
         setCar(data.car);
       } catch {
         if (!controller.signal.aborted) {
-          setError('Не удалось загрузить данные автомобиля. Проверьте подключение');
+          setError('Не удалось загрузить карточку. Проверьте сеть');
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -104,7 +104,7 @@ export function CarDetailModal({
       <ModalShell
         title={
           visibleCar ? (
-            <span className="inline-flex min-w-0 items-center gap-2">
+            <span className="inline-flex max-w-full min-w-0 items-center gap-2">
               <BrandIcon
                 brand={visibleCar.brand}
                 className="h-5 w-5 shrink-0 text-[var(--text-secondary)]"
@@ -114,13 +114,13 @@ export function CarDetailModal({
               </span>
             </span>
           ) : (
-            'Карточка автомобиля'
+            'Карточка машины'
           )
         }
         headerMeta={
           visibleCar ? (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-0.5 font-mono text-xs font-bold tracking-tight text-[var(--text-primary)] tabular-nums sm:text-sm">
+              <span className="inline-flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-0.5 font-mono text-xs font-semibold tracking-tight text-[var(--text-primary)] tabular-nums sm:text-sm">
                 {visibleCar.plate}
               </span>
               <StatusBadge status={visibleCar.status} />
@@ -135,10 +135,10 @@ export function CarDetailModal({
         zIndexClass="z-50"
       >
         {loading && visibleCar === null ? (
-          <div aria-busy="true" aria-label="Загрузка карточки автомобиля" className="space-y-3">
-            <div className="h-20 animate-pulse rounded-xl bg-[var(--bg-elevated)]" />
-            <div className="h-28 animate-pulse rounded-xl bg-[var(--bg-elevated)]" />
-            <div className="h-12 animate-pulse rounded-xl bg-[var(--bg-elevated)]" />
+          <div aria-busy="true" aria-label="Загрузка карточки машины" className="space-y-3">
+            <div className="h-20 rounded-xl bg-[var(--bg-elevated)]" />
+            <div className="h-28 rounded-xl bg-[var(--bg-elevated)]" />
+            <div className="h-12 rounded-xl bg-[var(--bg-elevated)]" />
           </div>
         ) : error && visibleCar === null ? (
           <div className="space-y-3 rounded-xl border border-[var(--status-repair-border)] bg-[var(--status-repair-bg)] p-4">

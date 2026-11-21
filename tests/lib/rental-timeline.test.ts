@@ -132,5 +132,8 @@ describe('formatters and discount state', () => {
     expect(getDiscountState('2026-11-20', '2026-11-21')).toEqual({ active: false, daysLeft: 0 });
     expect(getDiscountState('2026-11-21', '2026-11-21')).toEqual({ active: true, daysLeft: 0 });
     expect(getDiscountState('2026-11-25', '2026-11-21')).toEqual({ active: true, daysLeft: 4 });
+    expect(getDiscountState('2026-11-21T12:00:00Z', '2026-11-21')).toEqual({ active: true, daysLeft: 0 });
+    expect(getDiscountState('2026-11-20T23:59:59Z', '2026-11-21')).toEqual({ active: false, daysLeft: 0 });
+    expect(getDiscountState('invalid-date', '2026-11-21')).toEqual({ active: false, daysLeft: 0 });
   });
 });

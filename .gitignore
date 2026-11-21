@@ -4,3 +4,5 @@ data/*.db*
 .superpowers/
 .env*.local
 .DS_Store
+tsconfig.tsbuildinfo
+next-env.d.ts

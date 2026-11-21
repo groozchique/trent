@@ -20,7 +20,7 @@ export function CarCompactCard({
       className="flex w-full cursor-pointer flex-col rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-left transition-colors duration-150 hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]/45 active:bg-[var(--bg-elevated)]"
     >
       <span className="flex w-full items-center justify-between gap-2">
-        <span className="inline-flex min-w-0 items-center truncate rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-0.5 font-mono text-sm font-bold tracking-tight text-[var(--text-primary)] tabular-nums">
+        <span className="inline-flex min-w-0 items-center truncate rounded-md border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-0.5 font-mono text-sm font-semibold tracking-tight text-[var(--text-primary)] tabular-nums">
           {car.plate}
         </span>
         <StatusBadge status={car.status} className="shrink-0" />

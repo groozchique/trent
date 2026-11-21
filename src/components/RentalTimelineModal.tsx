@@ -107,7 +107,7 @@ export function RentalTimelineModal({
 
       onUpdated();
     } catch {
-      setError('Не удалось обновить оплату. Проверьте подключение');
+      setError('Не удалось обновить оплату. Проверьте сеть');
     } finally {
       setPendingDueDate(null);
     }
@@ -140,12 +140,13 @@ export function RentalTimelineModal({
         ) : undefined
       }
       onClose={onClose}
+      closeDisabled={pendingDueDate !== null}
       maxWidthClass="max-w-xl"
       zIndexClass="z-[60]"
     >
       {rental === null ? (
         <p className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-6 text-center text-sm text-[var(--text-secondary)]">
-          Аренда для этого автомобиля не настроена
+          Аренда для этой машины не настроена
         </p>
       ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-6 text-center text-sm text-[var(--text-secondary)]">
@@ -239,7 +240,7 @@ export function RentalTimelineModal({
                     </div>
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2.5">
+                  <div className="flex w-full items-center justify-between gap-2.5 sm:w-auto sm:shrink-0 sm:justify-end">
                     <span className="text-sm font-semibold tabular-nums">
                       {formatRub(item.amount)}
                     </span>

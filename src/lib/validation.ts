@@ -2,6 +2,18 @@ import { z } from 'zod';
 import type { CarStatus, FineStatus, RentalPeriodicity } from '@/db/schema';
 import type { TimelineItem } from '@/lib/rental/timeline';
 
+z.config(z.locales.ru());
+
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 export type CarSummaryDto = {
   id: number;
   plate: string;
@@ -127,7 +139,7 @@ const optionalNullableIsoDate = (typeMessage: string, formatMessage: string) =>
 
 const carStatusSchema = z.enum(
   ['in_rent', 'in_repair', 'available'],
-  'Выберите корректный статус автомобиля',
+  'Выберите статус машины',
 );
 
 const mileageField = z
@@ -209,7 +221,7 @@ export const upsertRentalSchema = z.object(
       'Укажите дату начала оплаты',
       'Укажите дату начала оплаты в формате ГГГГ-ММ-ДД',
     ),
-    active: z.boolean('Некорректный флаг активности аренды').default(true),
+    active: z.boolean('Укажите, активна ли аренда').default(true),
   },
   'Некорректные данные аренды',
 );
@@ -248,8 +260,8 @@ export const createMaintenanceSchema = z.object(
   {
     title: nonEmptyString('Укажите название работ'),
     performedAt: isoDateField(
-      'Укажите дату проведения работ',
-      'Укажите дату проведения работ в формате ГГГГ-ММ-ДД',
+      'Укажите дату работ',
+      'Укажите дату работ в формате ГГГГ-ММ-ДД',
     ),
     mileage: mileageField,
     laborCost: z
@@ -275,7 +287,7 @@ export async function parseJsonBody<T>(request: Request, schema: z.ZodType<T>): 
   try {
     raw = await request.json();
   } catch {
-    throw new SyntaxError('Некорректный формат запроса');
+    throw new ApiError(400, 'Некорректный формат запроса');
   }
   return schema.parse(raw);
 }

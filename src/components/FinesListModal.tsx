@@ -25,17 +25,24 @@ const FINE_STATUS_META: Record<FineDto['status'], { label: string; style: CSSPro
   },
 };
 
+export type FineDiscountMeta =
+  | { kind: 'none'; label: string; daysLeft: 0 }
+  | { kind: 'expired'; label: string; daysLeft: 0; deadline: string }
+  | { kind: 'active'; label: string; daysLeft: number; deadline: string };
+
 /** Compute human-readable Russian discount state without negative remaining days. */
-export function getFineDiscountMeta(
-  fine: FineDto,
-  todayIso: string,
-): { kind: 'active' | 'expired' | 'none'; label: string; daysLeft: number } {
+export function getFineDiscountMeta(fine: FineDto, todayIso: string): FineDiscountMeta {
   if (fine.discountDeadline === null) {
     return { kind: 'none', label: 'Без скидки', daysLeft: 0 };
   }
   const discount = getDiscountState(fine.discountDeadline, todayIso);
   if (!discount.active) {
-    return { kind: 'expired', label: 'Скидка истекла', daysLeft: 0 };
+    return {
+      kind: 'expired',
+      label: 'Скидка истекла',
+      daysLeft: 0,
+      deadline: fine.discountDeadline,
+    };
   }
   const deadlineLabel = formatDateRu(fine.discountDeadline);
   if (fine.discountAmount !== null) {
@@ -43,12 +50,14 @@ export function getFineDiscountMeta(
       kind: 'active',
       label: `Со скидкой ${formatRub(fine.discountAmount)} до ${deadlineLabel}`,
       daysLeft: discount.daysLeft,
+      deadline: fine.discountDeadline,
     };
   }
   return {
     kind: 'active',
     label: `Скидка до ${deadlineLabel}`,
     daysLeft: discount.daysLeft,
+    deadline: fine.discountDeadline,
   };
 }
 

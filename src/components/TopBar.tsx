@@ -16,19 +16,24 @@ const ROLE_LABELS: Record<SessionUser['role'], string> = {
 export function TopBar({ user }: { user: SessionUser | null }) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   async function handleLogout() {
     if (loggingOut) return;
+    setLogoutError(null);
     setLoggingOut(true);
     try {
       const response = await fetch('/api/auth/logout', { method: 'POST' });
       if (response.ok) {
         router.push('/login');
         router.refresh();
+        return;
       }
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      setLogoutError(data?.error ?? 'Не удалось выйти. Попробуйте ещё раз');
+      setLoggingOut(false);
     } catch {
-      // Keep the current view active so the user can retry if the request fails.
-    } finally {
+      setLogoutError('Не удалось выйти. Проверьте сеть');
       setLoggingOut(false);
     }
   }
@@ -50,7 +55,7 @@ export function TopBar({ user }: { user: SessionUser | null }) {
             <span className="bg-[#18191B]" />
           </span>
           <span className="truncate text-sm font-semibold tracking-tight sm:text-base">
-            Таксопарк
+            tRent
           </span>
         </Link>
 
@@ -81,6 +86,20 @@ export function TopBar({ user }: { user: SessionUser | null }) {
           <ThemeToggle />
         </div>
       </div>
+
+      {logoutError && (
+        <div
+          role="alert"
+          style={{
+            backgroundColor: 'var(--status-repair-bg)',
+            borderColor: 'var(--status-repair-border)',
+            color: 'var(--status-repair-text)',
+          }}
+          className="border-t px-3 py-1.5 text-center text-xs font-medium sm:px-6"
+        >
+          {logoutError}
+        </div>
+      )}
     </header>
   );
 }

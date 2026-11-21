@@ -162,6 +162,7 @@ describe('TopBar', () => {
 
     render(<TopBar user={{ id: 1, username: 'admin', role: 'admin' }} />);
 
+    expect(screen.getByText('tRent')).toBeInTheDocument();
     expect(screen.getByText('admin')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /тем/i })).toBeInTheDocument();
 
@@ -178,12 +179,17 @@ describe('TopBar', () => {
   it('hides logout button and keeps theme toggle when user is null', () => {
     render(<TopBar user={null} />);
 
+    expect(screen.getByText('tRent')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Выйти' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /тем/i })).toBeInTheDocument();
   });
 
-  it('re-enables logout button without redirecting if logout fails', async () => {
-    const fetchMock = vi.fn().mockRejectedValue(new Error('Network error'));
+  it('shows Russian error feedback and re-enables logout button if logout fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'Ошибка завершения сессии' }),
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     render(<TopBar user={{ id: 2, username: 'viewer', role: 'viewer' }} />);
@@ -191,8 +197,15 @@ describe('TopBar', () => {
     const logoutBtn = screen.getByRole('button', { name: 'Выйти' });
     fireEvent.click(logoutBtn);
 
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ошибка завершения сессии');
+    expect(logoutBtn).not.toBeDisabled();
+    expect(pushMock).not.toHaveBeenCalled();
+
+    fetchMock.mockRejectedValueOnce(new Error('Network error'));
+    fireEvent.click(logoutBtn);
+
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST' });
+      expect(screen.getByRole('alert')).toHaveTextContent(/Не удалось выйти/i);
       expect(logoutBtn).not.toBeDisabled();
     });
     expect(pushMock).not.toHaveBeenCalled();

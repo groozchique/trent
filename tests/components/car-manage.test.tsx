@@ -170,6 +170,10 @@ describe('CarManageClient', () => {
     expect(tabs).toHaveLength(4);
     expect(tabs[0]).toHaveTextContent('Общая информация');
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    expect(tabs[0]).toHaveAttribute('aria-controls', 'manage-panel-info');
+    expect(tabs[1]).not.toHaveAttribute('aria-controls');
+    expect(tabs[2]).not.toHaveAttribute('aria-controls');
+    expect(tabs[3]).not.toHaveAttribute('aria-controls');
     expect(screen.getByLabelText('Гос. номер')).toHaveValue('А123ВС 777');
 
     fireEvent.click(within(tablist).getByRole('tab', { name: 'ТО и ремонт' }));
@@ -375,15 +379,15 @@ describe('CarManageClient', () => {
     expect(screen.getByText('145 000 км')).toBeInTheDocument();
 
     // Inline two-step delete confirmation
-    fireEvent.click(screen.getByRole('button', { name: 'Удалить автомобиль' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить машину' }));
     expect(confirmSpy).not.toHaveBeenCalled();
 
     const cancelBtn = screen.getByRole('button', { name: 'Отмена' });
     fireEvent.click(cancelBtn);
-    expect(screen.queryByRole('button', { name: 'Подтвердить удаление' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Да, удалить' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Удалить автомобиль' }));
-    const confirmDeleteBtn = screen.getByRole('button', { name: 'Подтвердить удаление' });
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить машину' }));
+    const confirmDeleteBtn = screen.getByRole('button', { name: 'Да, удалить' });
     expect(confirmDeleteBtn).toHaveAttribute(
       'style',
       expect.stringContaining('--status-danger-fg'),
@@ -438,7 +442,7 @@ describe('CarManageClient', () => {
     fireEvent.change(screen.getByLabelText('Название работ'), {
       target: { value: 'Замена тормозных колодок' },
     });
-    fireEvent.change(screen.getByLabelText('Дата проведения'), {
+    fireEvent.change(screen.getByLabelText('Дата'), {
       target: { value: '2026-11-21' },
     });
     fireEvent.change(screen.getByLabelText(/Пробег/i), {
@@ -687,5 +691,58 @@ describe('CarManageClient', () => {
     });
 
     expect(await within(fineForm).findByRole('status')).toHaveTextContent(/Штраф добавлен/i);
+  });
+
+  it('renders DELETE error inside delete confirmation section and syncs MaintenanceTab mileage when car prop updates', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'Не удалось удалить автомобиль из базы' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(<CarManageClient car={SAMPLE_CAR} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить машину' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Да, удалить' }));
+
+    const deleteSection = screen.getByRole('region', { name: 'Удаление машины' });
+    expect(await within(deleteSection).findByRole('alert')).toHaveTextContent(
+      'Не удалось удалить автомобиль из базы',
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'ТО и ремонт' }));
+    expect(screen.getByLabelText(/Пробег/i)).toHaveValue(142500);
+
+    rerender(<CarManageClient car={{ ...SAMPLE_CAR, mileage: 149000 }} />);
+    expect(screen.getByLabelText(/Пробег/i)).toHaveValue(149000);
+  });
+
+  it('preserves in-progress RentalTab input across parent rerenders when rental fields are unchanged and syncs when changed', () => {
+    const { rerender } = render(<CarManageClient car={SAMPLE_CAR} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Аренда' }));
+    const renterInput = screen.getByLabelText('Арендатор');
+    fireEvent.change(renterInput, { target: { value: 'Новый Арендатор' } });
+    expect(renterInput).toHaveValue('Новый Арендатор');
+
+    // Fresh object identity with identical primitive rental values should NOT overwrite in-progress typing
+    rerender(
+      <CarManageClient
+        car={{ ...SAMPLE_CAR, rental: { ...SAMPLE_CAR.rental! } }}
+      />,
+    );
+    expect(screen.getByLabelText('Арендатор')).toHaveValue('Новый Арендатор');
+
+    // Genuine rental change from server should sync into the form
+    rerender(
+      <CarManageClient
+        car={{
+          ...SAMPLE_CAR,
+          rental: { ...SAMPLE_CAR.rental!, renterName: 'Обновлённый Арендатор' },
+        }}
+      />,
+    );
+    expect(screen.getByLabelText('Арендатор')).toHaveValue('Обновлённый Арендатор');
   });
 });
