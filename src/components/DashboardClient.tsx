@@ -7,6 +7,7 @@ import type { CarStatus, UserRole } from '@/db/schema';
 import type { CarSummaryDto } from '@/lib/validation';
 import { AddCarModal } from './AddCarModal';
 import { CarCompactCard } from './CarCompactCard';
+import { CarDetailModal } from './CarDetailModal';
 
 type StatusFilter = 'all' | CarStatus;
 
@@ -51,7 +52,7 @@ export function DashboardClient({
   const inRentCount = cars.filter((car) => car.status === 'in_rent').length;
   const totalUnpaidFines = cars.reduce((sum, car) => sum + car.unpaidFinesCount, 0);
 
-  async function handleCarCreated() {
+  async function refreshCars() {
     try {
       const response = await fetch('/api/cars', { cache: 'no-store' });
       if (response.ok) {
@@ -210,7 +211,18 @@ export function DashboardClient({
           open={addModalOpen}
           onClose={() => setAddModalOpen(false)}
           onCreated={() => {
-            void handleCarCreated();
+            void refreshCars();
+          }}
+        />
+      )}
+
+      {selectedCarId !== null && (
+        <CarDetailModal
+          carId={selectedCarId}
+          userRole={userRole}
+          onClose={() => setSelectedCarId(null)}
+          onUpdated={() => {
+            void refreshCars();
           }}
         />
       )}
