@@ -78,6 +78,9 @@ function getUniqueConstraintMessage(err: unknown): string | null {
     if (message.includes('fines.resolution_number')) {
       return 'Штраф с таким номером постановления уже существует';
     }
+    if (message.includes('users.username')) {
+      return 'Пользователь с таким логином уже существует';
+    }
     return 'Запись с такими данными уже существует';
   }
   return null;
