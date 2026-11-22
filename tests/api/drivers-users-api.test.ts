@@ -22,6 +22,7 @@ import { listUsersSafe } from '@/lib/users';
 import { shiftUtcDaysIso } from '@/lib/format';
 import { POST as loginPost } from '@/app/api/auth/login/route';
 import { POST as endRentalPost } from '@/app/api/cars/[id]/rental/end/route';
+import { POST as togglePaymentPost } from '@/app/api/cars/[id]/rental/payments/route';
 import { GET as listDriversGet, POST as createDriverPost } from '@/app/api/drivers/route';
 import {
   GET as getDriverDetailGet,
@@ -424,6 +425,7 @@ describe('Drivers & Admin Users libraries and API routes', () => {
           carModel: string;
           rentDebt30d: number;
           active: boolean;
+          timeline: Array<{ dueDate: string; amount: number; status: string }>;
         }>;
         fines: Array<{ id: number; carPlate: string; driverName: string | null; status: string }>;
       };
@@ -433,13 +435,21 @@ describe('Drivers & Admin Users libraries and API routes', () => {
     expect(detail.unpaidFinesCount).toBe(2);
     expect(detail.activeCars).toHaveLength(2);
     expect(detail.rentalsHistory.map((r) => r.id)).toEqual([r1.id, r2.id, r3.id]);
-    expect(detail.rentalsHistory.find((r) => r.id === r3.id)).toMatchObject({
+    const r3Detail = detail.rentalsHistory.find((r) => r.id === r3.id);
+    expect(r3Detail).toMatchObject({
       carPlate: 'Е303ЕЕ 777',
       carBrand: 'Skoda',
       carModel: 'Octavia',
       rentDebt30d: 2500,
       active: false,
     });
+    expect(r3Detail?.timeline).toEqual([
+      expect.objectContaining({
+        dueDate: dMinus10,
+        amount: 2500,
+        status: 'overdue',
+      }),
+    ]);
     expect(detail.fines).toHaveLength(3);
     expect(detail.fines.map((f) => f.carPlate)).toEqual(['В202ВВ 777', 'А101АА 777', 'Е303ЕЕ 777']);
     expect(detail.fines.every((f) => f.driverName === 'Иванов Алексей')).toBe(true);
@@ -492,6 +502,23 @@ describe('Drivers & Admin Users libraries and API routes', () => {
     );
     expect(unarchiveRes.status).toBe(200);
     expect(((await unarchiveRes.json()) as { driver: { archived: boolean } }).driver.archived).toBe(false);
+
+    // Driver 1 now has NO active cars, but closing r1/r2 left closed debt on r3 (dMinus10) — settling via explicit rentalId clears it
+    const settleClosedRes = await togglePaymentPost(
+      jsonReq(`http://localhost/api/cars/${car3.id}/rental/payments`, 'POST', {
+        rentalId: r3.id,
+        dueDate: dMinus10,
+        paid: true,
+      }),
+      idCtx(car3.id),
+    );
+    expect(settleClosedRes.status).toBe(200);
+    const afterSettleDetail = await getDriverDetail(db, driver1.id, todayIso);
+    expect(afterSettleDetail?.rentalsHistory.find((r) => r.id === r3.id)).toMatchObject({
+      rentDebt30d: 0,
+      timeline: [expect.objectContaining({ dueDate: dMinus10, status: 'paid' })],
+    });
+    expect(afterSettleDetail?.rentDebt30d).toBeLessThan(12500);
   });
 
   it('enforces admin-only RBAC (401/403) and Russian 400/404 validation on /api/users*', async () => {

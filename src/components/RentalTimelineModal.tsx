@@ -4,7 +4,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
 import type { TimelineItem } from '@/lib/rental/timeline';
 import type { RentalDto } from '@/lib/validation';
-import { formatDateRu, formatRub } from '@/lib/format';
+import { formatDateRu, formatRentalPeriod, formatRub } from '@/lib/format';
 import { ModalShell } from './ModalShell';
 
 const PERIODICITY_SHORT: Record<RentalPeriodicity, string> = {
@@ -51,6 +51,7 @@ export function RentalTimelineModal({
   carId,
   rental,
   timeline,
+  carInfo,
   userRole,
   onClose,
   onUpdated,
@@ -58,6 +59,7 @@ export function RentalTimelineModal({
   carId: number;
   rental: RentalDto | null;
   timeline: TimelineItem[];
+  carInfo?: { brand: string; model: string; plate: string };
   userRole: UserRole;
   onClose: () => void;
   onUpdated: () => void;
@@ -68,7 +70,8 @@ export function RentalTimelineModal({
 
   useEffect(() => {
     setItems(timeline);
-  }, [timeline]);
+    setError(null);
+  }, [timeline, rental?.id]);
 
   const overdueCount = items.filter((item) => item.status === 'overdue').length;
   const paidCount = items.filter((item) => item.status === 'paid').length;
@@ -83,7 +86,11 @@ export function RentalTimelineModal({
       const response = await fetch(`/api/cars/${carId}/rental/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: item.dueDate, paid: nextPaid }),
+        body: JSON.stringify({
+          rentalId: rental.id,
+          dueDate: item.dueDate,
+          paid: nextPaid,
+        }),
       });
 
       if (!response.ok) {
@@ -95,12 +102,18 @@ export function RentalTimelineModal({
       const data = (await response.json()) as { payment?: { paidAt: string | null } };
       const nextPaidAt = data.payment?.paidAt ?? (nextPaid ? new Date().toISOString() : null);
       const todayIso = new Date().toISOString().slice(0, 10);
+      const closedByToday =
+        !rental.active && rental.endDate !== null && rental.endDate <= todayIso;
 
       setItems((prev) =>
         prev.map((entry) => {
           if (entry.dueDate !== item.dueDate) return entry;
           const nextStatus: TimelineItem['status'] =
-            nextPaidAt !== null ? 'paid' : entry.dueDate < todayIso ? 'overdue' : 'upcoming';
+            nextPaidAt !== null
+              ? 'paid'
+              : entry.dueDate < todayIso || (closedByToday && entry.dueDate === todayIso)
+                ? 'overdue'
+                : 'upcoming';
           return { ...entry, paidAt: nextPaidAt, status: nextStatus };
         }),
       );
@@ -119,11 +132,26 @@ export function RentalTimelineModal({
       headerMeta={
         rental ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)]">
-            <span className="font-medium text-[var(--text-primary)]">{rental.renterName}</span>
+            {carInfo ? (
+              <>
+                <span className="font-medium text-[var(--text-primary)]">
+                  {carInfo.brand} {carInfo.model}
+                </span>
+                <span className="inline-flex items-center rounded border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--text-primary)] tabular-nums">
+                  {carInfo.plate}
+                </span>
+              </>
+            ) : (
+              <span className="font-medium text-[var(--text-primary)]">{rental.renterName}</span>
+            )}
             <span className="tabular-nums">
               {formatRub(rental.rateAmount)} / {PERIODICITY_SHORT[rental.periodicity]}
             </span>
-            <span className="tabular-nums">с {formatDateRu(rental.startDate)}</span>
+            <span className="tabular-nums">
+              {rental.endDate !== null
+                ? formatRentalPeriod(rental.startDate, rental.endDate, rental.active)
+                : `с ${formatDateRu(rental.startDate)}`}
+            </span>
             {!rental.active && (
               <span
                 style={{
@@ -133,7 +161,7 @@ export function RentalTimelineModal({
                 }}
                 className="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium"
               >
-                Приостановлена
+                {rental.endDate !== null ? 'Завершена' : 'Приостановлена'}
               </span>
             )}
           </div>

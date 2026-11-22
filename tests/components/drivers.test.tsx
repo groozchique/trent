@@ -115,6 +115,26 @@ const SAMPLE_DRIVER_DETAIL: DriverDetailDto = {
       carPlate: 'А123ВС 777',
       carBrand: 'Kia',
       carModel: 'Rio',
+      timeline: [
+        {
+          dueDate: '2026-11-04',
+          amount: 2400,
+          status: 'paid',
+          paidAt: '2026-11-04T10:00:00Z',
+        },
+        {
+          dueDate: '2026-11-11',
+          amount: 2400,
+          status: 'overdue',
+          paidAt: null,
+        },
+        {
+          dueDate: '2026-11-18',
+          amount: 2400,
+          status: 'overdue',
+          paidAt: null,
+        },
+      ],
     },
     {
       id: 95,
@@ -131,6 +151,7 @@ const SAMPLE_DRIVER_DETAIL: DriverDetailDto = {
       carPlate: 'В456ОР 777',
       carBrand: 'Hyundai',
       carModel: 'Solaris',
+      timeline: [],
     },
   ],
   fines: [
@@ -644,5 +665,142 @@ describe('DriverDetailModal', () => {
     expect(screen.queryByText('с 15.08.2026 по 15.08.2026')).not.toBeInTheDocument();
 
     expect(screen.getByText('18810177261100001001')).toHaveClass('break-all');
+  });
+
+  it('opens RentalTimelineModal from История аренды for a driver with no active car and lets admin toggle payment', async () => {
+    const unassignedDebtorDetail: DriverDetailDto = {
+      ...SAMPLE_DRIVER_DETAIL,
+      activeCars: [],
+      rentDebt30d: 2500,
+      rentalsHistory: [
+        {
+          id: 98,
+          carId: 12,
+          driverId: 1,
+          renterName: 'Иванов Алексей Сергеевич',
+          driverPhone: '+7 916 111-22-33',
+          rateAmount: 2500,
+          periodicity: 'weekly',
+          startDate: '2026-11-10',
+          endDate: '2026-11-18',
+          active: false,
+          rentDebt30d: 2500,
+          carPlate: 'Е303ЕЕ 777',
+          carBrand: 'Skoda',
+          carModel: 'Octavia',
+          timeline: [
+            {
+              dueDate: '2026-11-10',
+              amount: 2500,
+              status: 'overdue',
+              paidAt: null,
+            },
+          ],
+        },
+      ],
+    };
+
+    const settledDetail: DriverDetailDto = {
+      ...unassignedDebtorDetail,
+      rentDebt30d: 0,
+      rentalsHistory: [
+        {
+          ...unassignedDebtorDetail.rentalsHistory[0],
+          rentDebt30d: 0,
+          timeline: [
+            {
+              dueDate: '2026-11-10',
+              amount: 2500,
+              status: 'paid',
+              paidAt: '2026-11-22T09:00:00Z',
+            },
+          ],
+        },
+      ],
+    };
+
+    let settled = false;
+    const onUpdated = vi.fn();
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/drivers/1' && (!init || !init.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ driver: settled ? settledDetail : unassignedDebtorDetail }),
+        });
+      }
+      if (url === '/api/cars/12/rental/payments' && init?.method === 'POST') {
+        settled = true;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            payment: {
+              id: 77,
+              rentalId: 98,
+              dueDate: '2026-11-10',
+              amount: 2500,
+              paidAt: '2026-11-22T09:00:00Z',
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(
+      <DriverDetailModal
+        driverId={1}
+        userRole="viewer"
+        onClose={vi.fn()}
+        onUpdated={onUpdated}
+      />,
+    );
+
+    const historyHeading = await screen.findByRole('heading', { name: 'История аренды (1)' });
+    const historySection = historyHeading.closest('section')!;
+    fireEvent.click(within(historySection).getByRole('button', { name: 'Таймлайн' }));
+
+    const dialogsAfterOpen = screen.getAllByRole('dialog');
+    const timelineDialog = dialogsAfterOpen[dialogsAfterOpen.length - 1];
+    expect(within(timelineDialog).getByText('Таймлайн оплаты аренды')).toBeInTheDocument();
+    expect(within(timelineDialog).getByText('Skoda Octavia')).toBeInTheDocument();
+    expect(within(timelineDialog).getByText('Е303ЕЕ 777')).toBeInTheDocument();
+    expect(within(timelineDialog).getByText('Завершена')).toBeInTheDocument();
+    expect(within(timelineDialog).getByText('Просрочен')).toBeInTheDocument();
+    expect(
+      within(timelineDialog).queryByRole('button', { name: 'Отметить оплату' }),
+    ).not.toBeInTheDocument();
+
+    // Admin sees pay button and settles closed rental debt using explicit rentalId
+    rerender(
+      <DriverDetailModal
+        driverId={1}
+        userRole="admin"
+        onClose={vi.fn()}
+        onUpdated={onUpdated}
+      />,
+    );
+
+    const payBtn = within(timelineDialog).getByRole('button', { name: 'Отметить оплату' });
+    fireEvent.click(payBtn);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/cars/12/rental/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rentalId: 98,
+          dueDate: '2026-11-10',
+          paid: true,
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(onUpdated).toHaveBeenCalledWith(settledDetail);
+    });
+    expect(within(timelineDialog).getByText('Оплачен')).toBeInTheDocument();
   });
 });

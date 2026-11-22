@@ -374,7 +374,11 @@ describe('CarDetailModal and nested modals', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/cars/1/rental/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: '2026-11-11', paid: true }),
+        body: JSON.stringify({
+          rentalId: SAMPLE_RENTAL.id,
+          dueDate: '2026-11-11',
+          paid: true,
+        }),
       });
     });
     expect(onUpdated).toHaveBeenCalledTimes(1);

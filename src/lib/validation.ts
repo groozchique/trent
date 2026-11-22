@@ -176,6 +176,7 @@ export type DriverRentalHistoryDto = RentalHistoryItemDto & {
   carPlate: string;
   carBrand: string;
   carModel: string;
+  timeline: TimelineItem[];
 };
 
 export type DriverFineDto = FineDto & {

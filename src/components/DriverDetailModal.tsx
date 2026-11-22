@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { Archive, ArchiveRestore, Car, Phone, User } from 'lucide-react';
+import { Archive, ArchiveRestore, CalendarDays, Car, Phone, User } from 'lucide-react';
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
 import { formatDateRu, formatDateTimeRu, formatRentalPeriod, formatRub } from '@/lib/format';
 import {
@@ -10,6 +10,7 @@ import {
 } from '@/lib/validation';
 import { FineStatusPill } from './FinesListModal';
 import { ModalShell } from './ModalShell';
+import { RentalTimelineModal } from './RentalTimelineModal';
 
 const PERIODICITY_RATE_LABEL: Record<RentalPeriodicity, string> = {
   daily: 'в день',
@@ -55,11 +56,13 @@ export function DriverDetailModal({
   const [saving, setSaving] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
+  const [selectedRentalId, setSelectedRentalId] = useState<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setLoadError(null);
+    setSelectedRentalId(null);
 
     async function loadDriver() {
       try {
@@ -104,7 +107,26 @@ export function DriverDetailModal({
   }, [driverId, reloadNonce]);
 
   const visibleDriver = driver && driver.id === driverId ? driver : null;
+  const selectedRental =
+    visibleDriver?.rentalsHistory.find((item) => item.id === selectedRentalId) ?? null;
   const busy = saving || archiving;
+
+  async function handleRentalTimelineUpdated() {
+    if (!visibleDriver) return;
+    try {
+      const response = await fetch(`/api/drivers/${visibleDriver.id}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const data = (await response.json()) as { driver?: DriverDetailDto };
+      if (data.driver) {
+        setDriver(data.driver);
+        onUpdated(data.driver);
+      }
+    } catch {
+      // Keep optimistic timeline UI state if background refresh fails.
+    }
+  }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -195,7 +217,8 @@ export function DriverDetailModal({
   }
 
   return (
-    <ModalShell
+    <>
+      <ModalShell
       title={
         visibleDriver ? (
           <span className="inline-flex max-w-full min-w-0 items-center gap-2">
@@ -428,10 +451,10 @@ export function DriverDetailModal({
             )}
           </section>
 
-          <section aria-label="Аренды" className="space-y-2.5">
+          <section aria-label="История аренды" className="space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                Аренды ({visibleDriver.rentalsHistory.length})
+                История аренды ({visibleDriver.rentalsHistory.length})
               </h3>
             </div>
 
@@ -483,22 +506,33 @@ export function DriverDetailModal({
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
+                    <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-col sm:items-end">
                       <span className="font-semibold text-[var(--text-primary)] tabular-nums">
                         {formatRub(item.rateAmount)} {PERIODICITY_RATE_LABEL[item.periodicity]}
                       </span>
-                      {item.rentDebt30d > 0 && (
-                        <span
-                          style={{
-                            backgroundColor: 'var(--status-overdue-bg)',
-                            borderColor: 'var(--status-overdue-border)',
-                            color: 'var(--status-overdue-text)',
-                          }}
-                          className="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium tabular-nums"
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                        {item.rentDebt30d > 0 && (
+                          <span
+                            style={{
+                              backgroundColor: 'var(--status-overdue-bg)',
+                              borderColor: 'var(--status-overdue-border)',
+                              color: 'var(--status-overdue-text)',
+                            }}
+                            className="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium tabular-nums"
+                          >
+                            Долг (30 дн.): {formatRub(item.rentDebt30d)}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => setSelectedRentalId(item.id)}
+                          className="inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          Долг (30 дн.): {formatRub(item.rentDebt30d)}
-                        </span>
-                      )}
+                          <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span>Таймлайн</span>
+                        </button>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -562,5 +596,24 @@ export function DriverDetailModal({
         </div>
       ) : null}
     </ModalShell>
+
+      {visibleDriver && selectedRental && (
+        <RentalTimelineModal
+          carId={selectedRental.carId}
+          rental={selectedRental}
+          timeline={selectedRental.timeline}
+          carInfo={{
+            brand: selectedRental.carBrand,
+            model: selectedRental.carModel,
+            plate: selectedRental.carPlate,
+          }}
+          userRole={userRole}
+          onClose={() => setSelectedRentalId(null)}
+          onUpdated={() => {
+            void handleRentalTimelineUpdated();
+          }}
+        />
+      )}
+    </>
   );
 }

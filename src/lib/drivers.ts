@@ -12,7 +12,7 @@ import {
 } from '@/db/schema';
 import { getTodayIso } from '@/lib/cars';
 import { computeRentDebt30d, groupPaymentsByRental } from '@/lib/finances';
-import type { TimelinePaymentInput } from '@/lib/rental/timeline';
+import { buildRentalTimeline, type TimelinePaymentInput } from '@/lib/rental/timeline';
 import type {
   DriverActiveCarDto,
   DriverDetailDto,
@@ -216,22 +216,34 @@ export async function getDriverDetail(
   );
 
   const rentalsHistory: DriverRentalHistoryDto[] = rentalRows.map(
-    ({ rental, carPlate, carBrand, carModel }) => ({
-      id: rental.id,
-      carId: rental.carId,
-      driverId: rental.driverId,
-      renterName: driver.fullName,
-      driverPhone: driver.phone,
-      rateAmount: rental.rateAmount,
-      periodicity: rental.periodicity,
-      startDate: rental.startDate,
-      endDate: rental.endDate,
-      active: rental.active,
-      rentDebt30d: computeRentDebt30d([rental], paymentsByRental, todayIso),
-      carPlate,
-      carBrand,
-      carModel,
-    }),
+    ({ rental, carPlate, carBrand, carModel }) => {
+      const timeline = buildRentalTimeline(
+        rental,
+        paymentsByRental.get(rental.id) ?? [],
+        todayIso,
+      );
+      const rentDebt30d = timeline.reduce(
+        (sum, item) => (item.status === 'overdue' ? sum + item.amount : sum),
+        0,
+      );
+      return {
+        id: rental.id,
+        carId: rental.carId,
+        driverId: rental.driverId,
+        renterName: driver.fullName,
+        driverPhone: driver.phone,
+        rateAmount: rental.rateAmount,
+        periodicity: rental.periodicity,
+        startDate: rental.startDate,
+        endDate: rental.endDate,
+        active: rental.active,
+        rentDebt30d,
+        carPlate,
+        carBrand,
+        carModel,
+        timeline,
+      };
+    },
   );
 
   const driverFines: DriverFineDto[] = fineRows.map(({ fine, carPlate }) => ({
