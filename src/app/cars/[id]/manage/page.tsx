@@ -3,11 +3,12 @@ import { CarManageClient } from '@/components/CarManageClient';
 import { db } from '@/db';
 import { getCurrentUser } from '@/lib/auth/session';
 import { getCarDetail } from '@/lib/cars';
+import { listDriverSummaries } from '@/lib/drivers';
 import { parsePositiveIntId } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
-/** Server-guarded admin page for managing car details, maintenance, rental, and fines. */
+/** Server-guarded admin page for managing car details, documents, maintenance, rental, and fines. */
 export default async function ManageCarPage({
   params,
 }: {
@@ -32,5 +33,7 @@ export default async function ManageCarPage({
     notFound();
   }
 
-  return <CarManageClient car={car} />;
+  const drivers = await listDriverSummaries(db);
+
+  return <CarManageClient car={car} drivers={drivers} />;
 }
