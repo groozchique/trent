@@ -12,7 +12,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react';
 import type { CarStatus, FineStatus, RentalPeriodicity } from '@/db/schema';
-import { formatDateRu, formatDateTimeRu, formatMileage, formatRub } from '@/lib/format';
+import {
+  formatDateRu,
+  formatDateTimeRu,
+  formatMileage,
+  formatRentalPeriod,
+  formatRub,
+} from '@/lib/format';
 import {
   createCarSchema,
   createDriverSchema,
@@ -1423,10 +1429,7 @@ function RentalTab({
                     {item.renterName}
                   </p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-[var(--text-secondary)] tabular-nums">
-                    <span>
-                      с {formatDateRu(item.startDate)} по{' '}
-                      {item.endDate ? formatDateRu(item.endDate) : formatDateRu(item.startDate)}
-                    </span>
+                    <span>{formatRentalPeriod(item.startDate, item.endDate)}</span>
                     {item.driverPhone && <span>{item.driverPhone}</span>}
                   </p>
                 </div>
@@ -1629,7 +1632,7 @@ function FinesTab({
     }
   }
 
-  const busy = syncing || submitting;
+  const busy = syncing || submitting || togglingFineId !== null;
 
   return (
     <div className="space-y-6">
@@ -1873,7 +1876,7 @@ function FinesTab({
                     <FineStatusPill status={fine.status} />
                     <button
                       type="button"
-                      disabled={busy || isToggling}
+                      disabled={busy}
                       onClick={() => {
                         void handleToggleFineStatus(fine);
                       }}

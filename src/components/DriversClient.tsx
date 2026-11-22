@@ -245,7 +245,9 @@ export function DriversClient({
     if (filterTab === 'active' && driver.archived) return false;
     if (
       filterTab === 'debtors' &&
-      (driver.archived || (driver.rentDebt30d <= 0 && driver.unpaidFinesSum <= 0 && driver.unpaidFinesCount <= 0))
+      driver.rentDebt30d <= 0 &&
+      driver.unpaidFinesSum <= 0 &&
+      driver.unpaidFinesCount <= 0
     ) {
       return false;
     }

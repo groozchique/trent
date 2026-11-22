@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, SlidersHorizontal, Wrench } from 'lucide-rea
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
 import { CAR_DOCUMENT_LABELS, type DeadlineState } from '@/lib/deadlines';
 import type { CarDetailDto, FineDto, MaintenanceDto } from '@/lib/validation';
-import { formatDateRu, formatMileage, formatRub } from '@/lib/format';
+import { formatDateRu, formatMileage, formatRentalPeriod, formatRub } from '@/lib/format';
 import { BrandIcon } from './BrandIcon';
 import { FineDetailModal } from './FineDetailModal';
 import { FineListRow, FinesListModal } from './FinesListModal';
@@ -481,10 +481,7 @@ export function CarDetailModal({
                               {item.renterName}
                             </p>
                             <p className="mt-0.5 text-[var(--text-secondary)] tabular-nums">
-                              с {formatDateRu(item.startDate)} по{' '}
-                              {item.endDate
-                                ? formatDateRu(item.endDate)
-                                : formatDateRu(item.startDate)}
+                              {formatRentalPeriod(item.startDate, item.endDate)}
                               {item.driverPhone ? `, ${item.driverPhone}` : ''}
                             </p>
                           </div>

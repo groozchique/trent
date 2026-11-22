@@ -280,6 +280,62 @@ describe('DriversClient', () => {
     expect(screen.getByText('Петров Олег Николаевич')).toBeInTheDocument();
   });
 
+  it('includes archived drivers with rent debt or unpaid fines in «С долгами» with «В архиве» badge', () => {
+    const driversWithArchivedDebtors: DriverSummaryDto[] = [
+      ...SAMPLE_DRIVERS,
+      {
+        id: 5,
+        fullName: 'Долгов Виктор Аркадьевич',
+        phone: '+7 905 555-66-77',
+        notes: null,
+        archived: true,
+        createdAt: '2026-09-12T09:00:00Z',
+        activeCars: [],
+        rentDebt30d: 3200,
+        unpaidFinesSum: 0,
+        unpaidFinesCount: 0,
+      },
+      {
+        id: 6,
+        fullName: 'Штрафов Роман Игоревич',
+        phone: null,
+        notes: null,
+        archived: true,
+        createdAt: '2026-09-14T09:00:00Z',
+        activeCars: [],
+        rentDebt30d: 0,
+        unpaidFinesSum: 1000,
+        unpaidFinesCount: 1,
+      },
+    ];
+
+    render(<DriversClient initialDrivers={driversWithArchivedDebtors} userRole="viewer" />);
+
+    // Default «Активные» excludes all archived drivers
+    expect(screen.queryByText('Долгов Виктор Аркадьевич')).not.toBeInTheDocument();
+    expect(screen.queryByText('Штрафов Роман Игоревич')).not.toBeInTheDocument();
+
+    // «С долгами» includes archived drivers with rent debt or unpaid fines and keeps «В архиве» badge
+    fireEvent.click(screen.getByRole('button', { name: 'С долгами' }));
+    const rentDebtorCard = screen.getByRole('button', { name: /Долгов Виктор Аркадьевич/ });
+    expect(within(rentDebtorCard).getByText('В архиве')).toBeInTheDocument();
+    expect(within(rentDebtorCard).getByText('3 200 ₽')).toBeInTheDocument();
+
+    const fineDebtorCard = screen.getByRole('button', { name: /Штрафов Роман Игоревич/ });
+    expect(within(fineDebtorCard).getByText('В архиве')).toBeInTheDocument();
+    expect(within(fineDebtorCard).getByText('1 000 ₽ (1 шт.)')).toBeInTheDocument();
+
+    expect(screen.queryByText('Архивов Сергей Петрович')).not.toBeInTheDocument();
+    expect(screen.queryByText('Петров Олег Николаевич')).not.toBeInTheDocument();
+
+    // «Архив» still shows only archived drivers
+    fireEvent.click(screen.getByRole('button', { name: 'Архив' }));
+    expect(screen.getByText('Архивов Сергей Петрович')).toBeInTheDocument();
+    expect(screen.getByText('Долгов Виктор Аркадьевич')).toBeInTheDocument();
+    expect(screen.getByText('Штрафов Роман Игоревич')).toBeInTheDocument();
+    expect(screen.queryByText('Иванов Алексей Сергеевич')).not.toBeInTheDocument();
+  });
+
   it('hides admin create control for viewer and allows admin to create a driver via POST /api/drivers', async () => {
     const { rerender } = render(<DriversClient initialDrivers={SAMPLE_DRIVERS} userRole="viewer" />);
     expect(screen.queryByRole('button', { name: 'Добавить водителя' })).not.toBeInTheDocument();
@@ -548,5 +604,45 @@ describe('DriverDetailModal', () => {
         'Нельзя архивировать водителя с активной арендой',
       );
     });
+  });
+
+  it('renders active rental without comma before «по настоящее время», omits fabricated endDate when null, and wraps resolutionNumber with break-all', async () => {
+    const driverWithNullEndDate: DriverDetailDto = {
+      ...SAMPLE_DRIVER_DETAIL,
+      rentalsHistory: [
+        SAMPLE_DRIVER_DETAIL.rentalsHistory[0],
+        {
+          ...SAMPLE_DRIVER_DETAIL.rentalsHistory[1],
+          id: 96,
+          startDate: '2026-08-15',
+          endDate: null,
+          active: false,
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ driver: driverWithNullEndDate }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <DriverDetailModal
+        driverId={1}
+        userRole="viewer"
+        onClose={vi.fn()}
+        onUpdated={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText('с 28.10.2026 по настоящее время')).toBeInTheDocument();
+    expect(screen.queryByText(/28\.10\.2026,\s*по настоящее время/)).not.toBeInTheDocument();
+
+    expect(screen.getByText('с 15.08.2026')).toBeInTheDocument();
+    expect(screen.queryByText('с 15.08.2026 по 15.08.2026')).not.toBeInTheDocument();
+
+    expect(screen.getByText('18810177261100001001')).toHaveClass('break-all');
   });
 });

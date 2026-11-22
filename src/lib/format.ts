@@ -77,3 +77,15 @@ export function getDiscountState(
   }
   return { active: true, daysLeft };
 }
+
+/** Format a rental date range without fabricating an end date when `endDate` is null. */
+export function formatRentalPeriod(
+  startDate: string,
+  endDate: string | null,
+  active = false,
+): string {
+  const startLabel = formatDateRu(startDate);
+  if (active) return `с ${startLabel} по настоящее время`;
+  if (endDate) return `с ${startLabel} по ${formatDateRu(endDate)}`;
+  return `с ${startLabel}`;
+}

@@ -1673,4 +1673,185 @@ describe('CarManageClient', () => {
       'Ошибка обновления статуса штрафа',
     );
   });
+
+  it('rejects unset document policyNumber or notes without expiresAt and still deletes saved docs on cleared date', async () => {
+    const carWithSavedOsago: CarDetailDto = {
+      ...SAMPLE_CAR,
+      documents: [
+        {
+          id: 1,
+          carId: 7,
+          type: 'osago',
+          expiresAt: '2026-11-30',
+          policyNumber: 'ХХХ 0123456789',
+          notes: 'Старый полис',
+          status: 'warning',
+          daysLeft: 9,
+        },
+      ],
+      deadlines: {
+        ...SAMPLE_CAR.deadlines,
+        documents: [
+          { type: 'osago', label: 'ОСАГО', expiresAt: '2026-11-30', daysLeft: 9, status: 'warning' },
+        ],
+      },
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/cars/7/documents' && init?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nextServiceMileage: null,
+            nextServiceDate: null,
+            documents: [],
+            deadlines: SAMPLE_CAR.deadlines,
+          }),
+        });
+      }
+      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ car: SAMPLE_CAR }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CarManageClient car={carWithSavedOsago} drivers={SAMPLE_DRIVERS} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Документы и ТО' }));
+
+    // (a1) Unset doc with policyNumber and empty expiresAt aborts PUT and preserves draft
+    const kaskoGroup = screen.getByRole('group', { name: 'КАСКО' });
+    const kaskoPolicyInput = within(kaskoGroup).getByLabelText('Номер документа');
+    fireEvent.change(kaskoPolicyInput, { target: { value: 'КАСКО-123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить документы и сроки' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Укажите дату окончания для документа «КАСКО»',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(kaskoPolicyInput).toHaveValue('КАСКО-123');
+
+    // (a2) Unset doc with notes and empty expiresAt also aborts PUT and preserves draft
+    fireEvent.change(kaskoPolicyInput, { target: { value: '' } });
+    const licenseGroup = screen.getByRole('group', { name: 'Лицензия такси' });
+    const licenseNotesInput = within(licenseGroup).getByLabelText('Примечание');
+    fireEvent.change(licenseNotesInput, { target: { value: 'Выдана в Москве' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить документы и сроки' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Укажите дату окончания для документа «Лицензия такси»',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(licenseNotesInput).toHaveValue('Выдана в Москве');
+
+    // (b) Clearing expiresAt on already-saved doc deletes it via PUT even with policyNumber/notes still filled
+    fireEvent.change(licenseNotesInput, { target: { value: '' } });
+    const osagoGroup = screen.getByRole('group', { name: 'ОСАГО' });
+    fireEvent.change(within(osagoGroup).getByLabelText('Дата окончания'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить документы и сроки' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/documents', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nextServiceMileage: null,
+          nextServiceDate: null,
+          documents: [],
+        }),
+      });
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Документы и сроки ТО сохранены');
+  });
+
+  it('disables other fine toggle buttons, sync button, and manual form while fine toggle PATCH is pending', async () => {
+    const carWithTwoFines: CarDetailDto = {
+      ...SAMPLE_CAR,
+      fines: [
+        SAMPLE_CAR.fines[0],
+        {
+          id: 12,
+          carId: 7,
+          driverId: 2,
+          driverName: 'Петров Дмитрий Иванович',
+          resolutionNumber: '18810177261100001002',
+          violatedAt: '2026-11-15T09:00:00+03:00',
+          amount: 500,
+          discountAmount: null,
+          discountDeadline: null,
+          paymentDeadline: '2027-01-14',
+          description: 'Парковка под знаком',
+          status: 'paid',
+        },
+      ],
+    };
+
+    let resolvePatch!: (value: Response | PromiseLike<Response>) => void;
+    const patchPromise = new Promise<Response>((resolve) => {
+      resolvePatch = resolve;
+    });
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/cars/7/fines/11' && init?.method === 'PATCH') {
+        return patchPromise;
+      }
+      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            car: {
+              ...carWithTwoFines,
+              fines: [
+                { ...carWithTwoFines.fines[0], status: 'paid' as const },
+                carWithTwoFines.fines[1],
+              ],
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CarManageClient car={carWithTwoFines} drivers={SAMPLE_DRIVERS} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Штрафы' }));
+
+    const syncButton = screen.getByRole('button', { name: 'Синхронизировать с API' });
+    const fineForm = screen.getByRole('form', { name: 'Добавить штраф вручную' });
+    const createButton = within(fineForm).getByRole('button', { name: 'Добавить штраф' });
+    const finesSection = screen.getByRole('region', { name: 'Список штрафов автомобиля' });
+    const firstRow = within(finesSection).getByText('18810177261100001001').closest('li')!;
+    const secondRow = within(finesSection).getByText('18810177261100001002').closest('li')!;
+
+    fireEvent.click(within(firstRow).getByRole('button', { name: 'Отметить оплаченным' }));
+
+    expect(within(firstRow).getByRole('button', { name: 'Сохранение...' })).toBeDisabled();
+    expect(within(secondRow).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeDisabled();
+    expect(syncButton).toBeDisabled();
+    expect(createButton).toBeDisabled();
+
+    resolvePatch({
+      ok: true,
+      status: 200,
+      json: async () => ({ fine: { ...carWithTwoFines.fines[0], status: 'paid' } }),
+    } as Response);
+
+    await waitFor(() => {
+      expect(within(firstRow).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeEnabled();
+    });
+    expect(within(secondRow).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeEnabled();
+    expect(syncButton).toBeEnabled();
+    expect(createButton).toBeEnabled();
+  });
 });

@@ -135,6 +135,23 @@ export function CarDocumentsTab({
     event.preventDefault();
     setFeedback(null);
 
+    const existingTypes = new Set(car.documents.map((doc) => doc.type));
+    const missingDateType = CAR_DOCUMENT_TYPES.find((type) => {
+      const draft = docDrafts[type];
+      return (
+        !existingTypes.has(type) &&
+        !draft.expiresAt.trim() &&
+        (draft.policyNumber.trim() !== '' || draft.notes.trim() !== '')
+      );
+    });
+    if (missingDateType) {
+      setFeedback({
+        kind: 'error',
+        message: `Укажите дату окончания для документа «${CAR_DOCUMENT_LABELS[missingDateType]}»`,
+      });
+      return;
+    }
+
     const trimmedMileage = nextServiceMileage.trim();
     const parsedMileage = trimmedMileage === '' ? null : Number(trimmedMileage);
 

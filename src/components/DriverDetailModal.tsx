@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Archive, ArchiveRestore, Car, Phone, User } from 'lucide-react';
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
-import { formatDateRu, formatDateTimeRu, formatRub } from '@/lib/format';
+import { formatDateRu, formatDateTimeRu, formatRentalPeriod, formatRub } from '@/lib/format';
 import {
   updateDriverSchema,
   type DriverDetailDto,
@@ -479,9 +479,7 @@ export function DriverDetailModal({
                       </div>
 
                       <p className="text-[var(--text-secondary)] tabular-nums">
-                        {item.active
-                          ? `с ${formatDateRu(item.startDate)}, по настоящее время`
-                          : `с ${formatDateRu(item.startDate)} по ${formatDateRu(item.endDate ?? item.startDate)}`}
+                        {formatRentalPeriod(item.startDate, item.endDate, item.active)}
                       </p>
                     </div>
 
@@ -544,7 +542,7 @@ export function DriverDetailModal({
                         <span className="inline-flex items-center rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--text-primary)] tabular-nums">
                           {fine.carPlate}
                         </span>
-                        <span className="font-mono text-[11px] tabular-nums">
+                        <span className="font-mono text-[11px] break-all tabular-nums">
                           {fine.resolutionNumber}
                         </span>
                       </div>

@@ -322,6 +322,14 @@ describe('DashboardClient', () => {
     );
 
     const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка и сроки' });
+    expect(
+      Array.from(kpiRegion.children).map((card) => card.firstElementChild?.textContent?.trim()),
+    ).toEqual([
+      'Итог за 30 дней',
+      'Неоплаченные штрафы',
+      'Сроки документов и ТО',
+      'Долг по аренде',
+    ]);
     expect(within(kpiRegion).getByText('Долг по аренде')).toBeInTheDocument();
     expect(within(kpiRegion).getByText('4 800 ₽')).toBeInTheDocument();
     expect(within(kpiRegion).getByText('Неоплаченные штрафы')).toBeInTheDocument();

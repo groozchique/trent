@@ -157,18 +157,22 @@ export function DashboardClient({
         className="mt-4 grid grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3 lg:grid-cols-4"
       >
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
-          <p className="text-xs font-medium text-[var(--text-secondary)]">Долг по аренде</p>
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Итог за 30 дней</p>
           <p
             className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
             style={{
               color:
-                summary.totalRentDebt30d > 0 ? 'var(--status-overdue-text)' : 'var(--text-primary)',
+                summary.netIncome30d > 0
+                  ? 'var(--status-rent-text)'
+                  : summary.netIncome30d < 0
+                    ? 'var(--status-repair-text)'
+                    : 'var(--text-primary)',
             }}
           >
-            {formatRub(summary.totalRentDebt30d)}
+            {formatSignedRub(summary.netIncome30d)}
           </p>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            {summary.totalRentDebt30d > 0 ? 'Просрочено за 30 дн.' : 'Просрочек за 30 дн. нет'}
+          <p className="mt-1 text-xs text-[var(--text-secondary)] tabular-nums">
+            Аренда {formatRub(summary.paidRental30d)}, ремонт {formatRub(summary.maintenanceCost30d)}
           </p>
         </div>
 
@@ -189,26 +193,6 @@ export function DashboardClient({
             {summary.totalUnpaidFinesCount > 0
               ? `${summary.totalUnpaidFinesCount} шт.`
               : 'Неоплаченных нет'}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
-          <p className="text-xs font-medium text-[var(--text-secondary)]">Итог за 30 дней</p>
-          <p
-            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
-            style={{
-              color:
-                summary.netIncome30d > 0
-                  ? 'var(--status-rent-text)'
-                  : summary.netIncome30d < 0
-                    ? 'var(--status-repair-text)'
-                    : 'var(--text-primary)',
-            }}
-          >
-            {formatSignedRub(summary.netIncome30d)}
-          </p>
-          <p className="mt-1 text-xs text-[var(--text-secondary)] tabular-nums">
-            Аренда {formatRub(summary.paidRental30d)}, ремонт {formatRub(summary.maintenanceCost30d)}
           </p>
         </div>
 
@@ -254,6 +238,22 @@ export function DashboardClient({
                 : 'Все сроки в норме'}
           </span>
         </button>
+
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Долг по аренде</p>
+          <p
+            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
+            style={{
+              color:
+                summary.totalRentDebt30d > 0 ? 'var(--status-overdue-text)' : 'var(--text-primary)',
+            }}
+          >
+            {formatRub(summary.totalRentDebt30d)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {summary.totalRentDebt30d > 0 ? 'Просрочено за 30 дн.' : 'Просрочек за 30 дн. нет'}
+          </p>
+        </div>
       </section>
 
       <section

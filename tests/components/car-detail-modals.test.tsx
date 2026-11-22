@@ -881,4 +881,38 @@ describe('CarDetailModal and nested modals', () => {
     });
     expect(within(carDialog).getByText(/Неоплаченных: 3/)).toBeInTheDocument();
   });
+
+  it('omits fabricated «по startDate» in CarDetailModal rental history when endDate is null', async () => {
+    const carWithNullEndDate: CarDetailDto = {
+      ...SAMPLE_CAR_DETAIL,
+      rentalHistory: [
+        {
+          id: 19,
+          carId: 1,
+          driverId: 2,
+          renterName: 'Петров Олег Николаевич',
+          driverPhone: null,
+          rateAmount: 2200,
+          periodicity: 'daily',
+          startDate: '2026-09-01',
+          endDate: null,
+          active: false,
+          rentDebt30d: 0,
+        },
+      ],
+    };
+
+    stubCarDetailFetch(carWithNullEndDate);
+
+    render(
+      <CarDetailModal carId={1} userRole="viewer" onClose={vi.fn()} onUpdated={vi.fn()} />,
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    const rentalSection = within(dialog).getByRole('region', { name: 'Аренда' });
+    fireEvent.click(within(rentalSection).getByRole('button', { name: /История аренд \(1\)/i }));
+
+    expect(within(rentalSection).getByText('с 01.09.2026')).toBeInTheDocument();
+    expect(within(rentalSection).queryByText(/по 01\.09\.2026/)).not.toBeInTheDocument();
+  });
 });

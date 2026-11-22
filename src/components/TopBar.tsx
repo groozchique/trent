@@ -65,7 +65,7 @@ export function TopBar({ user }: { user: SessionUser | null }) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-3 px-3 sm:h-14 sm:flex-nowrap sm:px-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-3 px-3 sm:px-6 md:h-14 md:flex-nowrap">
         <Link
           href={user ? '/' : '/login'}
           className="order-1 flex h-14 min-w-0 shrink-0 items-center gap-2 rounded-md py-1 text-[var(--text-primary)] transition-opacity hover:opacity-80 sm:gap-2.5"
@@ -87,7 +87,7 @@ export function TopBar({ user }: { user: SessionUser | null }) {
         {user && (
           <nav
             aria-label="Основная навигация"
-            className="order-3 flex w-full items-center gap-1 overflow-x-auto border-t border-[var(--border-subtle)] py-1.5 sm:order-2 sm:ml-2 sm:w-auto sm:border-t-0 sm:py-0"
+            className="order-3 flex w-full items-center gap-1 overflow-x-auto border-t border-[var(--border-subtle)] py-1.5 md:order-2 md:ml-2 md:w-auto md:border-t-0 md:py-0"
           >
             {navItems.map((item) => (
               <Link
@@ -106,14 +106,14 @@ export function TopBar({ user }: { user: SessionUser | null }) {
           </nav>
         )}
 
-        <div className="order-2 ml-auto flex h-14 shrink-0 items-center gap-1.5 sm:order-3 sm:gap-2">
+        <div className="order-2 ml-auto flex h-14 shrink-0 items-center gap-1.5 sm:gap-2 md:order-3">
           {user && (
             <>
               <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1 text-xs sm:px-2.5">
                 <span className="max-w-[68px] truncate font-medium text-[var(--text-primary)] sm:max-w-[160px]">
                   {user.username}
                 </span>
-                <span className="hidden rounded bg-[var(--bg-surface)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-secondary)] sm:inline">
+                <span className="hidden rounded bg-[var(--bg-surface)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-secondary)] md:inline">
                   {ROLE_LABELS[user.role]}
                 </span>
               </div>

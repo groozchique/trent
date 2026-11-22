@@ -244,4 +244,22 @@ describe('TopBar', () => {
     rerender(<TopBar user={null} />);
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
+
+  it('wraps nav below md (640px-767px) and moves role badge + single-row layout to md breakpoint', () => {
+    const { container } = render(
+      <TopBar user={{ id: 1, username: 'admin', role: 'admin' }} />,
+    );
+
+    const innerRow = container.querySelector('header > div');
+    expect(innerRow).toHaveClass('flex-wrap', 'md:flex-nowrap', 'md:h-14');
+    expect(innerRow).not.toHaveClass('sm:flex-nowrap');
+
+    const nav = screen.getByRole('navigation', { name: 'Основная навигация' });
+    expect(nav).toHaveClass('order-3', 'w-full', 'md:order-2', 'md:w-auto');
+    expect(nav).not.toHaveClass('sm:order-2');
+
+    const roleLabel = screen.getByText('Администратор');
+    expect(roleLabel).toHaveClass('hidden', 'md:inline');
+    expect(roleLabel).not.toHaveClass('sm:inline');
+  });
 });
