@@ -31,13 +31,16 @@ export type CarSummaryDto = {
   model: string;
   status: CarStatus;
   mileage: number;
+  stsNumber: string | null;
+  nextServiceMileage: number | null;
+  nextServiceDate: string | null;
   unpaidFinesCount: number;
-  stsNumber?: string | null;
-  unpaidFinesSum?: number;
-  rentDebt30d?: number;
-  activeDriverName?: string | null;
-  deadlineStatus?: DeadlineState;
-  urgentDeadlinesCount?: number;
+  unpaidFinesSum: number;
+  rentDebt30d: number;
+  activeDriverId: number | null;
+  activeDriverName: string | null;
+  deadlineStatus: DeadlineState;
+  urgentDeadlinesCount: number;
 };
 
 export type FleetDashboardSummary = {
@@ -53,6 +56,8 @@ export type FleetDashboardSummary = {
 export type FineDto = {
   id: number;
   carId: number;
+  driverId: number | null;
+  driverName: string | null;
   resolutionNumber: string;
   violatedAt: string;
   amount: number;
@@ -66,10 +71,13 @@ export type FineDto = {
 export type RentalDto = {
   id: number;
   carId: number;
+  driverId: number | null;
   renterName: string;
+  driverPhone: string | null;
   rateAmount: number;
   periodicity: RentalPeriodicity;
   startDate: string;
+  endDate: string | null;
   active: boolean;
 };
 
@@ -128,8 +136,11 @@ export type MaintenanceDto = {
 };
 
 export type CarDetailDto = CarSummaryDto & {
+  documents: CarDocumentDto[];
+  deadlines: CarDeadlineSummary;
   fines: FineDto[];
   rental: RentalDto | null;
+  rentalHistory: RentalHistoryItemDto[];
   timeline: TimelineItem[];
   maintenance: MaintenanceDto[];
 };
@@ -349,28 +360,43 @@ export const updateFineStatusSchema = z.object(
   'Некорректные данные статуса штрафа',
 );
 
-export const upsertRentalSchema = z.object(
-  {
-    driverId: driverIdField,
-    // shortcut: renterName stays required in Task 2 so unmodified rental/route.ts passes tsc until Task 3 resolves driverId.
-    renterName: nonEmptyString('Укажите имя арендатора'),
-    rateAmount: positiveIntField(
-      'Укажите ставку аренды',
-      'Ставка аренды должна быть целым числом',
-      'Ставка аренды должна быть больше нуля',
-    ),
-    periodicity: z.enum(
-      ['daily', 'weekly', 'monthly'],
-      'Выберите корректную периодичность оплаты',
-    ),
-    startDate: isoDateField(
-      'Укажите дату начала оплаты',
-      'Укажите дату начала оплаты в формате ГГГГ-ММ-ДД',
-    ),
-    active: z.boolean('Укажите, активна ли аренда').default(true),
-  },
-  'Некорректные данные аренды',
-);
+export const upsertRentalSchema = z
+  .object(
+    {
+      driverId: driverIdField,
+      renterName: z
+        .string('Укажите имя арендатора')
+        .trim()
+        .transform((v) => (v === '' ? undefined : v))
+        .nullable()
+        .optional()
+        .transform((v) => v ?? undefined),
+      rateAmount: positiveIntField(
+        'Укажите ставку аренды',
+        'Ставка аренды должна быть целым числом',
+        'Ставка аренды должна быть больше нуля',
+      ),
+      periodicity: z.enum(
+        ['daily', 'weekly', 'monthly'],
+        'Выберите корректную периодичность оплаты',
+      ),
+      startDate: isoDateField(
+        'Укажите дату начала оплаты',
+        'Укажите дату начала оплаты в формате ГГГГ-ММ-ДД',
+      ),
+      active: z.boolean('Укажите, активна ли аренда').default(true),
+    },
+    'Некорректные данные аренды',
+  )
+  .refine(
+    (data) =>
+      (data.driverId !== undefined && data.driverId !== null) ||
+      (data.renterName !== undefined && data.renterName.length > 0),
+    {
+      message: 'Выберите водителя или укажите имя арендатора',
+      path: ['driverId'],
+    },
+  );
 
 export const endRentalSchema = z.object(
   {
@@ -538,10 +564,18 @@ export function parsePositiveIntId(raw: string): number | null {
 }
 
 /** Read JSON body and validate with a Zod schema. */
-export async function parseJsonBody<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
+export async function parseJsonBody<T>(
+  request: Request,
+  schema: z.ZodType<T>,
+  options?: { allowEmpty?: boolean },
+): Promise<T> {
+  const rawText = await request.text();
+  if (options?.allowEmpty && rawText.trim() === '') {
+    return schema.parse({});
+  }
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = JSON.parse(rawText);
   } catch {
     throw new ApiError(400, 'Некорректный формат запроса');
   }

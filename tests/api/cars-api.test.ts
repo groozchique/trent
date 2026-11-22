@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type { AppDb } from '@/db';
-import { cars, fines, maintenanceParts, maintenanceRecords, rentalPayments, rentals, users } from '@/db/schema';
+import { carDocuments, cars, drivers, fines, maintenanceParts, maintenanceRecords, rentalPayments, rentals, users } from '@/db/schema';
 import { seedDatabase } from '@/db/seed';
 import { SESSION_COOKIE_NAME, createSession } from '@/lib/auth/session';
 import { handleApiError } from '@/lib/cars';
@@ -77,11 +77,13 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
   beforeEach(async () => {
     mockState.cookieJar.clear();
     const db = mockState.db!;
+    await db.delete(carDocuments);
     await db.delete(maintenanceParts);
     await db.delete(maintenanceRecords);
     await db.delete(rentalPayments);
     await db.delete(rentals);
     await db.delete(fines);
+    await db.delete(drivers);
     await db.delete(cars);
   });
 

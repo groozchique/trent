@@ -12,7 +12,7 @@ export async function POST(_request: Request, context: RouteIdContext) {
     const carId = await parseCarIdParam(context);
 
     const [car] = await db
-      .select({ id: cars.id, plate: cars.plate })
+      .select({ id: cars.id, plate: cars.plate, stsNumber: cars.stsNumber })
       .from(cars)
       .where(eq(cars.id, carId))
       .limit(1);
@@ -20,7 +20,7 @@ export async function POST(_request: Request, context: RouteIdContext) {
       return NextResponse.json({ error: 'Автомобиль не найден' }, { status: 404 });
     }
 
-    const result = await syncCarFines(db, car.id, car.plate);
+    const result = await syncCarFines(db, car.id, car.plate, { stsNumber: car.stsNumber });
     return NextResponse.json(result);
   } catch (err) {
     return handleApiError(err);

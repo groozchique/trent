@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { cars, rentalPayments, rentals } from '@/db/schema';
 import { requireAdmin } from '@/lib/auth/session';
@@ -21,13 +21,26 @@ export async function POST(request: Request, context: RouteIdContext) {
       return NextResponse.json({ error: 'Автомобиль не найден' }, { status: 404 });
     }
 
+    const rentalCondition =
+      data.rentalId !== undefined
+        ? and(eq(rentals.id, data.rentalId), eq(rentals.carId, carId))
+        : and(eq(rentals.carId, carId), eq(rentals.active, true));
+
     const [rental] = await db
       .select({ id: rentals.id, rateAmount: rentals.rateAmount })
       .from(rentals)
-      .where(eq(rentals.carId, carId))
+      .where(rentalCondition)
       .limit(1);
     if (!rental) {
-      return NextResponse.json({ error: 'Аренда для автомобиля не настроена' }, { status: 404 });
+      return NextResponse.json(
+        {
+          error:
+            data.rentalId !== undefined
+              ? 'Аренда не найдена'
+              : 'Аренда для автомобиля не настроена',
+        },
+        { status: 404 },
+      );
     }
 
     const paidAt = data.paid ? new Date().toISOString() : null;

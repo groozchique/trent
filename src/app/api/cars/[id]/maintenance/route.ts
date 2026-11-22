@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { cars, maintenanceParts, maintenanceRecords } from '@/db/schema';
+import { cars, maintenanceRecords } from '@/db/schema';
 import { requireAdmin } from '@/lib/auth/session';
-import { handleApiError, parseCarIdParam, type RouteIdContext } from '@/lib/cars';
+import {
+  computeMaintenanceTotal,
+  handleApiError,
+  insertMaintenanceParts,
+  parseCarIdParam,
+  type RouteIdContext,
+} from '@/lib/cars';
 import {
   createMaintenanceSchema,
   parseJsonBody,
@@ -24,9 +30,7 @@ export async function POST(request: Request, context: RouteIdContext) {
         .get();
       if (!car) return null;
 
-      const partsSum = data.parts.reduce((sum, part) => sum + part.quantity * part.unitPrice, 0);
-      const totalCost = data.laborCost + partsSum;
-
+      const totalCost = computeMaintenanceTotal(data.laborCost, data.parts);
       const insertedRecord = tx
         .insert(maintenanceRecords)
         .values({
@@ -41,22 +45,7 @@ export async function POST(request: Request, context: RouteIdContext) {
         .returning()
         .get();
 
-      const insertedParts =
-        data.parts.length > 0
-          ? tx
-              .insert(maintenanceParts)
-              .values(
-                data.parts.map((part) => ({
-                  recordId: insertedRecord.id,
-                  name: part.name,
-                  sku: part.sku,
-                  quantity: part.quantity,
-                  unitPrice: part.unitPrice,
-                })),
-              )
-              .returning()
-              .all()
-          : [];
+      const insertedParts = insertMaintenanceParts(tx, insertedRecord.id, data.parts);
 
       if (data.mileage > car.mileage) {
         tx.update(cars).set({ mileage: data.mileage }).where(eq(cars.id, carId)).run();
