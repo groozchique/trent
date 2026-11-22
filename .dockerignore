@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.superpowers
+data/*.db*
+.env*.local
+tests
+vitest.config.ts
+vitest.setup.ts
+dist
