@@ -7,12 +7,14 @@ import { TopBar } from '@/components/TopBar';
 
 const pushMock = vi.fn();
 const refreshMock = vi.fn();
+const pathnameMock = vi.fn(() => '/');
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
     push: pushMock,
     refresh: refreshMock,
   }),
+  usePathname: () => pathnameMock(),
 }));
 
 function mockMatchMedia(matches: boolean) {
@@ -148,6 +150,8 @@ describe('TopBar', () => {
     mockMatchMedia(false);
     pushMock.mockReset();
     refreshMock.mockReset();
+    pathnameMock.mockReset();
+    pathnameMock.mockReturnValue('/');
   });
 
   afterEach(() => {
@@ -209,5 +213,35 @@ describe('TopBar', () => {
       expect(logoutBtn).not.toBeDisabled();
     });
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('renders role-aware navigation links and highlights active route via usePathname', () => {
+    pathnameMock.mockReturnValue('/drivers');
+    const { rerender } = render(<TopBar user={{ id: 2, username: 'viewer', role: 'viewer' }} />);
+
+    const fleetLink = screen.getByRole('link', { name: 'Автопарк' });
+    const driversLink = screen.getByRole('link', { name: 'Водители' });
+    expect(fleetLink).toHaveAttribute('href', '/');
+    expect(driversLink).toHaveAttribute('href', '/drivers');
+    expect(fleetLink).not.toHaveAttribute('aria-current', 'page');
+    expect(driversLink).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('link', { name: 'Пользователи' })).not.toBeInTheDocument();
+
+    pathnameMock.mockReturnValue('/users');
+    rerender(<TopBar user={{ id: 1, username: 'admin', role: 'admin' }} />);
+    const usersLink = screen.getByRole('link', { name: 'Пользователи' });
+    expect(usersLink).toHaveAttribute('href', '/users');
+    expect(usersLink).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Водители' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    pathnameMock.mockReturnValue('/cars/7/manage');
+    rerender(<TopBar user={{ id: 1, username: 'admin', role: 'admin' }} />);
+    expect(screen.getByRole('link', { name: 'Автопарк' })).toHaveAttribute('aria-current', 'page');
+
+    rerender(<TopBar user={null} />);
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
 });

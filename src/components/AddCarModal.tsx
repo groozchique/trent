@@ -21,6 +21,7 @@ function AddCarModalBody({
 }) {
   const plateInputRef = useRef<HTMLInputElement>(null);
   const [plate, setPlate] = useState('');
+  const [stsNumber, setStsNumber] = useState('');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [status, setStatus] = useState<CarStatus>('available');
@@ -55,12 +56,14 @@ function AddCarModalBody({
 
     const trimmedMileage = mileage.trim();
     const parsedMileage = trimmedMileage === '' ? undefined : Number(trimmedMileage);
+    const trimmedSts = stsNumber.trim();
     const parsed = createCarSchema.safeParse({
       plate,
       brand,
       model,
       status,
       mileage: parsedMileage,
+      ...(trimmedSts !== '' ? { stsNumber: trimmedSts } : {}),
     });
 
     if (!parsed.success) {
@@ -126,24 +129,45 @@ function AddCarModalBody({
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-3.5">
-          <div>
-            <label
-              htmlFor="add-car-plate"
-              className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]"
-            >
-              Гос. номер
-            </label>
-            <input
-              ref={plateInputRef}
-              id="add-car-plate"
-              name="plate"
-              type="text"
-              value={plate}
-              onChange={(event) => setPlate(event.target.value)}
-              disabled={submitting}
-              placeholder="А123ВС 777"
-              className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] disabled:opacity-60"
-            />
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="add-car-plate"
+                className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]"
+              >
+                Гос. номер
+              </label>
+              <input
+                ref={plateInputRef}
+                id="add-car-plate"
+                name="plate"
+                type="text"
+                value={plate}
+                onChange={(event) => setPlate(event.target.value)}
+                disabled={submitting}
+                placeholder="А123ВС 777"
+                className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="add-car-sts"
+                className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]"
+              >
+                Номер СТС
+              </label>
+              <input
+                id="add-car-sts"
+                name="stsNumber"
+                type="text"
+                value={stsNumber}
+                onChange={(event) => setStsNumber(event.target.value)}
+                disabled={submitting}
+                placeholder="99 01 123456"
+                className="h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 font-mono text-sm text-[var(--text-primary)] tabular-nums placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] disabled:opacity-60"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">

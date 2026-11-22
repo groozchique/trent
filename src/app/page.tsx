@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { DashboardClient } from '@/components/DashboardClient';
 import { db } from '@/db';
 import { getCurrentUser } from '@/lib/auth/session';
-import { listCarSummaries } from '@/lib/cars';
+import { listCarSummariesWithSummary } from '@/lib/cars';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +12,7 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const cars = await listCarSummaries(db);
+  const { cars, summary } = await listCarSummariesWithSummary(db);
 
-  return <DashboardClient initialCars={cars} userRole={user.role} />;
+  return <DashboardClient initialCars={cars} initialSummary={summary} userRole={user.role} />;
 }

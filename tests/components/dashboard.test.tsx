@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { CarSummaryDto } from '@/lib/validation';
+import type { CarSummaryDto, FleetDashboardSummary } from '@/lib/validation';
 import { CarCompactCard } from '@/components/CarCompactCard';
 import { DashboardClient } from '@/components/DashboardClient';
 import { AddCarModal } from '@/components/AddCarModal';
@@ -94,6 +94,36 @@ describe('CarCompactCard', () => {
 
     fireEvent.click(cardButton);
     expect(onSelect).toHaveBeenCalledWith(1);
+  });
+
+  it('shows activeDriverName and urgent deadline badge without leaking stsNumber on compact card', () => {
+    const warningCar: CarSummaryDto = {
+      ...SAMPLE_CARS[0],
+      stsNumber: '99 01 112233',
+      activeDriverId: 5,
+      activeDriverName: 'Иванов Алексей Сергеевич',
+      deadlineStatus: 'warning',
+      urgentDeadlinesCount: 2,
+    };
+
+    const { rerender } = render(<CarCompactCard car={warningCar} onSelect={vi.fn()} />);
+    expect(screen.getByText('Иванов Алексей Сергеевич')).toBeInTheDocument();
+    const warningPill = screen.getByText('Истекают сроки: 2');
+    expect(warningPill).toHaveAttribute('data-deadline-status', 'warning');
+    expect(screen.queryByText(/99 01 112233/)).not.toBeInTheDocument();
+
+    rerender(
+      <CarCompactCard
+        car={{
+          ...warningCar,
+          deadlineStatus: 'expired',
+          urgentDeadlinesCount: 1,
+        }}
+        onSelect={vi.fn()}
+      />,
+    );
+    const expiredPill = screen.getByText('Просрочено сроков: 1');
+    expect(expiredPill).toHaveAttribute('data-deadline-status', 'expired');
   });
 });
 
@@ -249,6 +279,109 @@ describe('DashboardClient', () => {
     });
     expect(refreshMock).toHaveBeenCalled();
   });
+
+  it('renders 4 KPI strip cards, filters urgent deadlines with «Сроки», and searches by activeDriverName', async () => {
+    const carsWithDeadlines: CarSummaryDto[] = [
+      {
+        ...SAMPLE_CARS[0],
+        rentDebt30d: 4800,
+        activeDriverId: 1,
+        activeDriverName: 'Иванов Алексей Сергеевич',
+        deadlineStatus: 'ok',
+        urgentDeadlinesCount: 0,
+      },
+      {
+        ...SAMPLE_CARS[1],
+        activeDriverId: 2,
+        activeDriverName: 'Смирнов Дмитрий Павлович',
+        deadlineStatus: 'warning',
+        urgentDeadlinesCount: 2,
+      },
+      {
+        ...SAMPLE_CARS[2],
+        deadlineStatus: 'expired',
+        urgentDeadlinesCount: 1,
+      },
+    ];
+    const summary: FleetDashboardSummary = {
+      totalRentDebt30d: 4800,
+      totalUnpaidFinesSum: 3750,
+      totalUnpaidFinesCount: 3,
+      paidRental30d: 32000,
+      maintenanceCost30d: 9600,
+      netIncome30d: 22400,
+      urgentDeadlineCarsCount: 2,
+    };
+
+    render(
+      <DashboardClient
+        initialCars={carsWithDeadlines}
+        initialSummary={summary}
+        userRole="viewer"
+      />,
+    );
+
+    const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка и сроки' });
+    expect(within(kpiRegion).getByText('Долг по аренде')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('4 800 ₽')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('Неоплаченные штрафы')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('3 750 ₽')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText(/3 шт\./)).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('Итог за 30 дней')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('+22 400 ₽')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('Сроки документов и ТО')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('2')).toBeInTheDocument();
+
+    // Toggle urgent deadlines via filter button
+    const urgentFilterBtn = screen.getByRole('button', { name: 'Сроки' });
+    fireEvent.click(urgentFilterBtn);
+    expect(urgentFilterBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('А123ВС 777')).not.toBeInTheDocument();
+    expect(screen.getByText('В456ОР 777')).toBeInTheDocument();
+    expect(screen.getByText('Е789КХ 799')).toBeInTheDocument();
+
+    fireEvent.click(urgentFilterBtn);
+    expect(urgentFilterBtn).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('А123ВС 777')).toBeInTheDocument();
+
+    // Search by driver name
+    const searchInput = screen.getByRole('searchbox');
+    fireEvent.change(searchInput, { target: { value: 'смирнов' } });
+    expect(screen.getByText('В456ОР 777')).toBeInTheDocument();
+    expect(screen.queryByText('А123ВС 777')).not.toBeInTheDocument();
+    expect(screen.queryByText('Е789КХ 799')).not.toBeInTheDocument();
+
+    fireEvent.change(searchInput, { target: { value: '' } });
+
+    // KPI card itself toggles the urgent deadlines filter
+    const kpiDeadlinesBtn = within(kpiRegion).getByRole('button', {
+      name: /Сроки документов и ТО/i,
+    });
+    fireEvent.click(kpiDeadlinesBtn);
+    expect(kpiDeadlinesBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('А123ВС 777')).not.toBeInTheDocument();
+  });
+
+  it('displays negative 30d net income with minus sign when maintenance exceeds paid rent', () => {
+    render(
+      <DashboardClient
+        initialCars={SAMPLE_CARS}
+        initialSummary={{
+          totalRentDebt30d: 0,
+          totalUnpaidFinesSum: 0,
+          totalUnpaidFinesCount: 0,
+          paidRental30d: 4000,
+          maintenanceCost30d: 7500,
+          netIncome30d: -3500,
+          urgentDeadlineCarsCount: 0,
+        }}
+        userRole="viewer"
+      />,
+    );
+
+    const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка и сроки' });
+    expect(within(kpiRegion).getByText('-3 500 ₽')).toBeInTheDocument();
+  });
 });
 
 describe('AddCarModal', () => {
@@ -307,5 +440,51 @@ describe('AddCarModal', () => {
     const backdrop = screen.getByTestId('add-car-modal-backdrop');
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('submits optional Номер СТС when provided and validates max length 32', async () => {
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ car: { ...SAMPLE_CARS[0], id: 9, stsNumber: '99 01 123456' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<AddCarModal open={true} onClose={onClose} onCreated={onCreated} />);
+
+    const stsInput = screen.getByLabelText('Номер СТС');
+    expect(stsInput).toHaveAttribute('placeholder', '99 01 123456');
+
+    fireEvent.change(screen.getByLabelText('Гос. номер'), { target: { value: 'К999МН 777' } });
+    fireEvent.change(screen.getByLabelText('Марка'), { target: { value: 'Toyota' } });
+    fireEvent.change(screen.getByLabelText('Модель'), { target: { value: 'Camry' } });
+    fireEvent.change(screen.getByLabelText(/Пробег/i), { target: { value: '5000' } });
+    fireEvent.change(stsInput, { target: { value: 'X'.repeat(33) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/32/);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.change(stsInput, { target: { value: '  99 01 123456  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/cars', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plate: 'К999МН 777',
+          brand: 'Toyota',
+          model: 'Camry',
+          status: 'available',
+          mileage: 5000,
+          stsNumber: '99 01 123456',
+        }),
+      });
+    });
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

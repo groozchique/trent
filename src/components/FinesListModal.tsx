@@ -98,6 +98,11 @@ export function FineListRow({
         </span>
         <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-[var(--text-secondary)]">
           <span className="tabular-nums">{formatDateTimeRu(fine.violatedAt)}</span>
+          {fine.driverName && (
+            <span className="font-medium text-[var(--text-primary)]">
+              Водитель: {fine.driverName}
+            </span>
+          )}
           <span
             style={
               discountMeta.kind === 'active' && fine.status === 'unpaid'

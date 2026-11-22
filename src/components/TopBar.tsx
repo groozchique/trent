@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth/session';
 import { ThemeToggle } from './ThemeToggle';
@@ -12,11 +12,36 @@ const ROLE_LABELS: Record<SessionUser['role'], string> = {
   viewer: 'Просмотр',
 };
 
-/** Persistent top navigation bar with user badge, logout action, and theme toggle. */
+/** Persistent top navigation bar with role-aware route links, user badge, logout, and theme toggle. */
 export function TopBar({ user }: { user: SessionUser | null }) {
   const router = useRouter();
+  const pathname = usePathname() ?? '';
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  const navItems = user
+    ? [
+        {
+          href: '/',
+          label: 'Автопарк',
+          isActive: pathname === '/' || pathname.startsWith('/cars'),
+        },
+        {
+          href: '/drivers',
+          label: 'Водители',
+          isActive: pathname === '/drivers' || pathname.startsWith('/drivers/'),
+        },
+        ...(user.role === 'admin'
+          ? [
+              {
+                href: '/users',
+                label: 'Пользователи',
+                isActive: pathname === '/users' || pathname.startsWith('/users/'),
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   async function handleLogout() {
     if (loggingOut) return;
@@ -40,10 +65,10 @@ export function TopBar({ user }: { user: SessionUser | null }) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
-      <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 px-3 sm:px-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-3 px-3 sm:h-14 sm:flex-nowrap sm:px-6">
         <Link
           href={user ? '/' : '/login'}
-          className="flex min-w-0 items-center gap-2 rounded-md py-1 text-[var(--text-primary)] transition-opacity hover:opacity-80 sm:gap-2.5"
+          className="order-1 flex h-14 min-w-0 shrink-0 items-center gap-2 rounded-md py-1 text-[var(--text-primary)] transition-opacity hover:opacity-80 sm:gap-2.5"
         >
           <span
             aria-hidden="true"
@@ -59,7 +84,29 @@ export function TopBar({ user }: { user: SessionUser | null }) {
           </span>
         </Link>
 
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        {user && (
+          <nav
+            aria-label="Основная навигация"
+            className="order-3 flex w-full items-center gap-1 overflow-x-auto border-t border-[var(--border-subtle)] py-1.5 sm:order-2 sm:ml-2 sm:w-auto sm:border-t-0 sm:py-0"
+          >
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={item.isActive ? 'page' : undefined}
+                className={
+                  item.isActive
+                    ? 'inline-flex h-8 shrink-0 items-center rounded-lg bg-[var(--accent)] px-2.5 text-xs font-medium whitespace-nowrap text-[var(--accent-fg)] transition-colors sm:px-3 sm:text-sm'
+                    : 'inline-flex h-8 shrink-0 items-center rounded-lg px-2.5 text-xs font-medium whitespace-nowrap text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] sm:px-3 sm:text-sm'
+                }
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+        )}
+
+        <div className="order-2 ml-auto flex h-14 shrink-0 items-center gap-1.5 sm:order-3 sm:gap-2">
           {user && (
             <>
               <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1 text-xs sm:px-2.5">

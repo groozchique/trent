@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, X } from 'lucide-react';
 import type { CarStatus, UserRole } from '@/db/schema';
-import type { CarSummaryDto } from '@/lib/validation';
+import { formatRub } from '@/lib/format';
+import type { CarSummaryDto, FleetDashboardSummary } from '@/lib/validation';
 import { AddCarModal } from './AddCarModal';
 import { CarCompactCard } from './CarCompactCard';
 import { CarDetailModal } from './CarDetailModal';
@@ -18,47 +19,90 @@ const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'available', label: 'Не в аренде' },
 ];
 
-/** Fleet dashboard with status/search filtering, summary counts, car grid, and admin creation modal. */
+function deriveFallbackSummary(carsList: CarSummaryDto[]): FleetDashboardSummary {
+  return {
+    totalRentDebt30d: carsList.reduce((sum, car) => sum + car.rentDebt30d, 0),
+    totalUnpaidFinesSum: carsList.reduce((sum, car) => sum + car.unpaidFinesSum, 0),
+    totalUnpaidFinesCount: carsList.reduce((sum, car) => sum + car.unpaidFinesCount, 0),
+    paidRental30d: 0,
+    maintenanceCost30d: 0,
+    netIncome30d: 0,
+    urgentDeadlineCarsCount: carsList.filter((car) => car.deadlineStatus !== 'ok').length,
+  };
+}
+
+function formatSignedRub(amount: number): string {
+  if (amount > 0) return `+${formatRub(amount)}`;
+  if (amount < 0) return `-${formatRub(Math.abs(amount))}`;
+  return formatRub(0);
+}
+
+/** Fleet dashboard with 30-day KPI strip, status/deadline/search filters, car grid, and modals. */
 export function DashboardClient({
   initialCars,
+  initialSummary,
   userRole,
 }: {
   initialCars: CarSummaryDto[];
+  initialSummary?: FleetDashboardSummary;
   userRole: UserRole;
 }) {
   const router = useRouter();
   const [cars, setCars] = useState<CarSummaryDto[]>(initialCars);
+  const [summary, setSummary] = useState<FleetDashboardSummary>(
+    () => initialSummary ?? deriveFallbackSummary(initialCars),
+  );
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [onlyUrgentDeadlines, setOnlyUrgentDeadlines] = useState(false);
   const [query, setQuery] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [selectedCarId, setSelectedCarId] = useState<number | null>(null);
 
   useEffect(() => {
     setCars(initialCars);
-  }, [initialCars]);
+    setSummary(initialSummary ?? deriveFallbackSummary(initialCars));
+  }, [initialCars, initialSummary]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredCars = cars.filter((car) => {
     if (statusFilter !== 'all' && car.status !== statusFilter) return false;
+    if (onlyUrgentDeadlines && car.deadlineStatus === 'ok') return false;
     if (!normalizedQuery) return true;
     return (
       car.plate.toLowerCase().includes(normalizedQuery) ||
       car.brand.toLowerCase().includes(normalizedQuery) ||
       car.model.toLowerCase().includes(normalizedQuery) ||
-      `${car.brand} ${car.model}`.toLowerCase().includes(normalizedQuery)
+      `${car.brand} ${car.model}`.toLowerCase().includes(normalizedQuery) ||
+      (car.activeDriverName ?? '').toLowerCase().includes(normalizedQuery)
     );
   });
 
   const inRentCount = cars.filter((car) => car.status === 'in_rent').length;
-  const totalUnpaidFines = cars.reduce((sum, car) => sum + car.unpaidFinesCount, 0);
+  const hasExpiredDeadlines = cars.some((car) => car.deadlineStatus === 'expired');
 
   async function refreshCars() {
     try {
       const response = await fetch('/api/cars', { cache: 'no-store' });
       if (response.ok) {
-        const data = (await response.json()) as { cars?: CarSummaryDto[] };
+        const data = (await response.json()) as {
+          cars?: CarSummaryDto[];
+          summary?: FleetDashboardSummary;
+        };
         if (Array.isArray(data.cars)) {
-          setCars(data.cars);
+          const nextCars = data.cars;
+          setCars(nextCars);
+          if (data.summary) {
+            setSummary(data.summary);
+          } else {
+            const fallback = deriveFallbackSummary(nextCars);
+            setSummary((prev) => ({
+              ...prev,
+              totalRentDebt30d: fallback.totalRentDebt30d,
+              totalUnpaidFinesSum: fallback.totalUnpaidFinesSum,
+              totalUnpaidFinesCount: fallback.totalUnpaidFinesCount,
+              urgentDeadlineCarsCount: fallback.urgentDeadlineCarsCount,
+            }));
+          }
         }
       }
     } catch {
@@ -70,6 +114,7 @@ export function DashboardClient({
 
   function resetFilters() {
     setStatusFilter('all');
+    setOnlyUrgentDeadlines(false);
     setQuery('');
   }
 
@@ -83,32 +128,16 @@ export function DashboardClient({
           <h1 className="text-xl font-semibold tracking-tight text-[var(--text-primary)] sm:text-2xl">
             Автопарк
           </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--text-secondary)] sm:text-sm">
-            <span>
-              Машин:{' '}
-              <strong className="font-semibold text-[var(--text-primary)] tabular-nums">
-                {cars.length}
-              </strong>
-            </span>
-            <span>
-              В аренде:{' '}
-              <strong className="font-semibold text-[var(--text-primary)] tabular-nums">
-                {inRentCount}
-              </strong>
-            </span>
-            <span>
-              Неоплаченные штрафы:{' '}
-              <strong
-                className="font-semibold tabular-nums"
-                style={{
-                  color:
-                    totalUnpaidFines > 0 ? 'var(--status-repair-text)' : 'var(--text-primary)',
-                }}
-              >
-                {totalUnpaidFines}
-              </strong>
-            </span>
-          </div>
+          <p className="mt-1 text-xs text-[var(--text-secondary)] sm:text-sm">
+            Машин:{' '}
+            <strong className="font-semibold text-[var(--text-primary)] tabular-nums">
+              {cars.length}
+            </strong>
+            {', '}в аренде:{' '}
+            <strong className="font-semibold text-[var(--text-primary)] tabular-nums">
+              {inRentCount}
+            </strong>
+          </p>
         </div>
 
         {userRole === 'admin' && (
@@ -122,6 +151,110 @@ export function DashboardClient({
           </button>
         )}
       </div>
+
+      <section
+        aria-label="Финансовая сводка и сроки"
+        className="mt-4 grid grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3 lg:grid-cols-4"
+      >
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Долг по аренде</p>
+          <p
+            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
+            style={{
+              color:
+                summary.totalRentDebt30d > 0 ? 'var(--status-overdue-text)' : 'var(--text-primary)',
+            }}
+          >
+            {formatRub(summary.totalRentDebt30d)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {summary.totalRentDebt30d > 0 ? 'Просрочено за 30 дн.' : 'Просрочек за 30 дн. нет'}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Неоплаченные штрафы</p>
+          <p
+            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
+            style={{
+              color:
+                summary.totalUnpaidFinesSum > 0
+                  ? 'var(--status-repair-text)'
+                  : 'var(--text-primary)',
+            }}
+          >
+            {formatRub(summary.totalUnpaidFinesSum)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)] tabular-nums">
+            {summary.totalUnpaidFinesCount > 0
+              ? `${summary.totalUnpaidFinesCount} шт.`
+              : 'Неоплаченных нет'}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Итог за 30 дней</p>
+          <p
+            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
+            style={{
+              color:
+                summary.netIncome30d > 0
+                  ? 'var(--status-rent-text)'
+                  : summary.netIncome30d < 0
+                    ? 'var(--status-repair-text)'
+                    : 'var(--text-primary)',
+            }}
+          >
+            {formatSignedRub(summary.netIncome30d)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)] tabular-nums">
+            Аренда {formatRub(summary.paidRental30d)}, ремонт {formatRub(summary.maintenanceCost30d)}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          aria-pressed={onlyUrgentDeadlines}
+          onClick={() => setOnlyUrgentDeadlines((prev) => !prev)}
+          style={
+            onlyUrgentDeadlines
+              ? {
+                  backgroundColor: 'var(--status-overdue-bg)',
+                  borderColor: 'var(--status-overdue-border)',
+                }
+              : undefined
+          }
+          className={`flex cursor-pointer flex-col rounded-xl border p-3 text-left transition-colors sm:p-4 ${
+            onlyUrgentDeadlines
+              ? ''
+              : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]/45'
+          }`}
+        >
+          <span className="text-xs font-medium text-[var(--text-secondary)]">
+            Сроки документов и ТО
+          </span>
+          <span
+            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
+            style={{
+              color:
+                summary.urgentDeadlineCarsCount > 0
+                  ? hasExpiredDeadlines
+                    ? 'var(--status-repair-text)'
+                    : 'var(--status-overdue-text)'
+                  : 'var(--text-primary)',
+            }}
+          >
+            {summary.urgentDeadlineCarsCount}
+          </span>
+          <span className="mt-1 text-xs text-[var(--text-secondary)]">
+            {onlyUrgentDeadlines
+              ? 'Фильтр «Сроки» включён'
+              : summary.urgentDeadlineCarsCount > 0
+                ? 'Нажмите для отбора'
+                : 'Все сроки в норме'}
+          </span>
+        </button>
+      </section>
 
       <section
         aria-label="Фильтры и поиск"
@@ -146,6 +279,39 @@ export function DashboardClient({
               </button>
             );
           })}
+
+          <button
+            type="button"
+            aria-pressed={onlyUrgentDeadlines}
+            onClick={() => setOnlyUrgentDeadlines((prev) => !prev)}
+            style={
+              onlyUrgentDeadlines
+                ? {
+                    backgroundColor: 'var(--status-overdue-bg)',
+                    borderColor: 'var(--status-overdue-border)',
+                    color: 'var(--status-overdue-text)',
+                  }
+                : undefined
+            }
+            className={
+              onlyUrgentDeadlines
+                ? 'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors sm:text-sm'
+                : 'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] sm:text-sm'
+            }
+          >
+            {summary.urgentDeadlineCarsCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  backgroundColor: hasExpiredDeadlines
+                    ? 'var(--status-repair-dot)'
+                    : 'var(--status-overdue)',
+                }}
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+              />
+            )}
+            <span>Сроки</span>
+          </button>
         </div>
 
         <div className="relative w-full lg:max-w-xs">
@@ -157,8 +323,8 @@ export function DashboardClient({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Номер, марка или модель"
-            aria-label="Поиск по номеру, марке или модели"
+            placeholder="Номер, марка, модель или водитель"
+            aria-label="Поиск по номеру, марке, модели или водителю"
             className="h-9 w-full appearance-none rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] pr-8 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query && (
@@ -176,9 +342,7 @@ export function DashboardClient({
 
       {cars.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-10 text-center">
-          <p className="text-sm font-medium text-[var(--text-primary)]">
-            Машин пока нет
-          </p>
+          <p className="text-sm font-medium text-[var(--text-primary)]">Машин пока нет</p>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
             {userRole === 'admin'
               ? 'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, штрафы и ТО.'
