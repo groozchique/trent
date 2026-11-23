@@ -200,6 +200,36 @@ export type SafeUserDto = {
   createdAt: string;
 };
 
+export type ReportPeriodType = 'weekly' | 'monthly';
+
+export type CarReportBreakdown = {
+  carId: number;
+  plate: string;
+  brand: string;
+  model: string;
+  paidRental: number;
+  managerIncome: number;
+  maintenanceCost: number;
+  ownerPayout: number;
+};
+
+export type FleetReportDto = {
+  type: ReportPeriodType;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  carId: number | null;
+  carLabel: string;
+  includeMaintenance: boolean;
+  paidRental: number;
+  managerIncome: number;
+  maintenanceCost: number;
+  ownerPayout: number;
+  cars: CarReportBreakdown[];
+  textPlain: string;
+  textTelegram: string;
+};
+
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_DATETIME_RE =
   /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
@@ -575,6 +605,62 @@ export function parsePositiveIntId(raw: string): number | null {
   const parsed = Number(raw);
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
+
+const reportCarIdField = z
+  .unknown()
+  .optional()
+  .transform((val, ctx) => {
+    if (val === undefined || val === null || val === '') {
+      return null;
+    }
+    if (typeof val === 'number') {
+      if (Number.isSafeInteger(val) && val > 0) return val;
+    } else if (typeof val === 'string') {
+      const parsed = parsePositiveIntId(val.trim());
+      if (parsed !== null) return parsed;
+    }
+    ctx.addIssue({ code: 'custom', message: 'Некорректный идентификатор автомобиля' });
+    return z.NEVER;
+  });
+
+const reportIncludeMaintenanceField = z
+  .unknown()
+  .optional()
+  .transform((val, ctx) => {
+    if (val === undefined || val === null) return false;
+    if (typeof val === 'boolean') return val;
+    if (val === 'true') return true;
+    if (val === 'false') return false;
+    ctx.addIssue({ code: 'custom', message: 'Некорректный параметр includeMaintenance' });
+    return z.NEVER;
+  });
+
+export const reportQuerySchema = z
+  .object(
+    {
+      type: z.enum(['weekly', 'monthly'], 'Выберите тип отчёта'),
+      date: isoDateField(
+        'Укажите дату недели в формате ГГГГ-ММ-ДД',
+        'Укажите дату недели в формате ГГГГ-ММ-ДД',
+      ).optional(),
+      month: z
+        .string('Укажите месяц в формате ГГГГ-ММ')
+        .trim()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Укажите месяц в формате ГГГГ-ММ')
+        .optional(),
+      carId: reportCarIdField,
+      includeMaintenance: reportIncludeMaintenanceField,
+    },
+    'Некорректные параметры отчёта',
+  )
+  .superRefine((data, ctx) => {
+    if (data.type === 'weekly' && !data.date) {
+      ctx.addIssue({ code: 'custom', path: ['date'], message: 'Укажите дату недели' });
+    }
+    if (data.type === 'monthly' && !data.month) {
+      ctx.addIssue({ code: 'custom', path: ['month'], message: 'Укажите месяц' });
+    }
+  });
 
 /** Read JSON body and validate with a Zod schema. */
 export async function parseJsonBody<T>(
