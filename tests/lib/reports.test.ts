@@ -315,4 +315,73 @@ describe('buildReport and formatReportText', () => {
       expect(output).toContain('Kia Rio (А123ВС 777)');
     }
   });
+
+  it('returns zero totals, empty cars list, and clean text on an empty fleet', async () => {
+    const report = await buildReport(db, {
+      type: 'weekly',
+      periodStart: '2026-11-23',
+      periodEnd: '2026-11-29',
+      carId: null,
+      includeMaintenance: true,
+    });
+
+    expect(report.paidRental).toBe(0);
+    expect(report.managerIncome).toBe(0);
+    expect(report.maintenanceCost).toBe(0);
+    expect(report.ownerPayout).toBe(0);
+    expect(report.cars).toEqual([]);
+    expect(report.carLabel).toBe('Все машины');
+    expect(report.textPlain).toContain('К выплате собственнику: 0 ₽');
+    expect(report.textPlain).not.toContain('По машинам:');
+    expect(report.textTelegram).toContain('К выплате собственнику: **0 ₽**');
+    expect(report.textTelegram).not.toContain('По машинам:');
+    for (const output of [report.textPlain, report.textTelegram]) {
+      expect(output).not.toMatch(/[—–]/);
+      expect(output).not.toContain(' - ');
+      expect(output).not.toMatch(/\p{Extended_Pictographic}/u);
+    }
+  });
+
+  it('computes negative ownerPayout for a car in repair with zero rentals/payments and 15 000 maintenance', async () => {
+    const [car] = await db
+      .insert(cars)
+      .values({ plate: 'О999АА 77', brand: 'Lada', model: 'Vesta', status: 'in_repair', mileage: 80000 })
+      .returning();
+
+    await db.insert(maintenanceRecords).values({
+      carId: car.id,
+      title: 'Ремонт двигателя',
+      performedAt: '2026-11-25',
+      mileage: 80000,
+      laborCost: 15000,
+      totalCost: 15000,
+    });
+
+    const report = await buildReport(db, {
+      type: 'weekly',
+      periodStart: '2026-11-23',
+      periodEnd: '2026-11-29',
+      carId: null,
+      includeMaintenance: true,
+    });
+
+    expect(report.paidRental).toBe(0);
+    expect(report.managerIncome).toBe(0);
+    expect(report.maintenanceCost).toBe(15000);
+    expect(report.ownerPayout).toBe(-15000);
+    expect(report.cars).toEqual([
+      {
+        carId: car.id,
+        plate: 'О999АА 77',
+        brand: 'Lada',
+        model: 'Vesta',
+        paidRental: 0,
+        managerIncome: 0,
+        maintenanceCost: 15000,
+        ownerPayout: -15000,
+      },
+    ]);
+    expect(report.textPlain).toContain('К выплате собственнику: -15 000 ₽');
+    expect(report.textTelegram).toContain('К выплате собственнику: **-15 000 ₽**');
+  });
 });

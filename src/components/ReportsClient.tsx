@@ -239,7 +239,7 @@ export function ReportsClient({
             Отчёты
           </h1>
           <p className="mt-1 text-xs text-[var(--text-secondary)] sm:text-sm">
-            {reportTitle} ({report.periodLabel}) · {report.carLabel}
+            {reportTitle}: {report.periodLabel}, {report.carLabel}
           </p>
         </div>
 

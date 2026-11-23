@@ -847,6 +847,11 @@ describe('CarManageClient', () => {
     expect(await screen.findByText('К555МН 777')).toBeInTheDocument();
     expect(screen.getByText('145 000 км')).toBeInTheDocument();
 
+    expect(
+      screen.getByText('Машина и все записи по аренде и ТО удалятся навсегда.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/штрафам/)).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: 'Удалить машину' }));
     expect(confirmSpy).not.toHaveBeenCalled();
 
@@ -1619,4 +1624,88 @@ describe('CarManageClient', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Документы и сроки ТО сохранены');
   });
 
+  it('submits managerCommissionPercent=0 when reset to 0 and syncs input value on rerender', async () => {
+    const carWithCommission: CarDetailDto = {
+      ...SAMPLE_CAR,
+      rental: {
+        ...SAMPLE_CAR.rental!,
+        managerCommissionPercent: 12,
+      },
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/cars/7/rental' && init?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            rental: {
+              ...carWithCommission.rental!,
+              managerCommissionPercent: 0,
+            },
+            carStatus: 'in_rent',
+          }),
+        });
+      }
+      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            car: {
+              ...carWithCommission,
+              rental: {
+                ...carWithCommission.rental!,
+                managerCommissionPercent: 0,
+              },
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(<CarManageClient car={carWithCommission} drivers={SAMPLE_DRIVERS} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Аренда' }));
+
+    const commissionInput = screen.getByLabelText('Процент менеджера, %');
+    expect(commissionInput).toHaveValue(12);
+
+    rerender(
+      <CarManageClient
+        car={{
+          ...carWithCommission,
+          rental: {
+            ...carWithCommission.rental!,
+            managerCommissionPercent: 18,
+          },
+        }}
+        drivers={SAMPLE_DRIVERS}
+      />,
+    );
+    expect(screen.getByLabelText('Процент менеджера, %')).toHaveValue(18);
+
+    fireEvent.change(commissionInput, { target: { value: '' } });
+    fireEvent.change(commissionInput, { target: { value: '0' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить аренду' }));
+
+    await waitFor(() => {
+      const rentalCall = fetchMock.mock.calls.find(
+        ([url, init]) => url === '/api/cars/7/rental' && init?.method === 'PUT',
+      );
+      expect(rentalCall).toBeDefined();
+      const parsedBody = JSON.parse(String(rentalCall?.[1]?.body));
+      expect(parsedBody).toEqual({
+        driverId: 1,
+        rateAmount: 2400,
+        periodicity: 'daily',
+        startDate: '2026-11-01',
+        active: true,
+        managerCommissionPercent: 0,
+      });
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Настройки аренды сохранены/i);
+  });
 });

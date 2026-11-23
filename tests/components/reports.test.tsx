@@ -77,7 +77,9 @@ describe('ReportsClient', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByRole('heading', { name: 'Отчёты' })).toBeInTheDocument();
-    expect(screen.getAllByText(/Еженедельный отчёт/).length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getByText('Еженедельный отчёт: неделя с 23.11.2026 по 29.11.2026, Все машины'),
+    ).toBeInTheDocument();
 
     const summary = screen.getByRole('region', { name: 'Сводка отчёта' });
     expect(within(summary).getByText('32 000 ₽')).toBeInTheDocument();
