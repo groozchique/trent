@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS rentals (
   periodicity TEXT NOT NULL,
   start_date TEXT NOT NULL,
   end_date TEXT,
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1,
+  manager_commission_percent REAL NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS rentals_active_car_unique ON rentals (car_id) WHERE active = 1;
 CREATE TABLE IF NOT EXISTS rental_payments (
@@ -120,6 +121,9 @@ const RENTAL_V2_COLUMNS: ColumnSpec[] = [
 const FINE_V2_COLUMNS: ColumnSpec[] = [
   { name: 'driver_id', definition: 'INTEGER REFERENCES drivers(id) ON DELETE SET NULL' },
 ];
+const RENTAL_V3_COLUMNS: ColumnSpec[] = [
+  { name: 'manager_commission_percent', definition: 'REAL NOT NULL DEFAULT 0' },
+];
 
 function getMissingColumns(
   sqlite: Database.Database,
@@ -163,7 +167,8 @@ function rebuildRentalsTable(sqlite: Database.Database): void {
       periodicity TEXT NOT NULL,
       start_date TEXT NOT NULL,
       end_date TEXT,
-      active INTEGER NOT NULL DEFAULT 1
+      active INTEGER NOT NULL DEFAULT 1,
+      manager_commission_percent REAL NOT NULL DEFAULT 0
     );
     INSERT INTO rentals_v2 (id, car_id, driver_id, renter_name, rate_amount, periodicity, start_date, end_date, active)
     SELECT id, car_id, driver_id, renter_name, rate_amount, periodicity, start_date, end_date, active
@@ -276,7 +281,22 @@ export function migrateDbV2(sqlite: Database.Database): void {
   }
 }
 
-/** Create a Drizzle SQLite instance with foreign keys enabled and v2 schema migrated. */
+const V3_SCHEMA_VERSION = 3;
+
+/** Idempotently upgrade a v2 SQLite database to the v3 schema. */
+export function migrateDbV3(sqlite: Database.Database): void {
+  if (getUserVersion(sqlite) >= V3_SCHEMA_VERSION) return;
+
+  sqlite
+    .transaction(() => {
+      if (getUserVersion(sqlite) >= V3_SCHEMA_VERSION) return;
+      ensureColumns(sqlite, 'rentals', RENTAL_V3_COLUMNS);
+      sqlite.pragma(`user_version = ${V3_SCHEMA_VERSION}`);
+    })
+    .immediate();
+}
+
+/** Create a Drizzle SQLite instance with foreign keys enabled and schema migrated to v3. */
 export function createDb(filePath?: string): AppDb {
   const target = filePath ?? process.env.DATABASE_URL ?? './data/taxi.db';
   if (target !== ':memory:' && !target.startsWith('file::memory:')) {
@@ -291,6 +311,7 @@ export function createDb(filePath?: string): AppDb {
   }
   sqlite.exec(INIT_SQL);
   migrateDbV2(sqlite);
+  migrateDbV3(sqlite);
 
   return drizzle(sqlite, { schema });
 }

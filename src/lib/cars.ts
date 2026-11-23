@@ -510,6 +510,7 @@ export async function getCarDetail(
         startDate: activeRentalRow.rental.startDate,
         endDate: activeRentalRow.rental.endDate,
         active: activeRentalRow.rental.active,
+        managerCommissionPercent: activeRentalRow.rental.managerCommissionPercent,
       }
     : null;
 
@@ -525,6 +526,7 @@ export async function getCarDetail(
       startDate: rental.startDate,
       endDate: rental.endDate,
       active: rental.active,
+      managerCommissionPercent: rental.managerCommissionPercent,
       rentDebt30d: computeRentDebt30d([rental], paymentsByRental, todayIso),
     }),
   );

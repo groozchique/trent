@@ -79,6 +79,7 @@ export type RentalDto = {
   startDate: string;
   endDate: string | null;
   active: boolean;
+  managerCommissionPercent: number;
 };
 
 export type RentalHistoryItemDto = {
@@ -92,6 +93,7 @@ export type RentalHistoryItemDto = {
   startDate: string;
   endDate: string | null;
   active: boolean;
+  managerCommissionPercent: number;
   rentDebt30d: number;
 };
 
@@ -386,6 +388,13 @@ export const upsertRentalSchema = z
         'Укажите дату начала оплаты в формате ГГГГ-ММ-ДД',
       ),
       active: z.boolean('Укажите, активна ли аренда').default(true),
+      managerCommissionPercent: z
+        .number('Укажите процент менеджера')
+        .finite('Некорректный процент менеджера')
+        .min(0, 'Процент менеджера не может быть меньше 0')
+        .max(100, 'Процент менеджера не может быть больше 100')
+        .default(0)
+        .transform((v) => Math.round(v * 100) / 100),
     },
     'Некорректные данные аренды',
   )

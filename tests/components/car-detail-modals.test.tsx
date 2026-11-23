@@ -104,6 +104,7 @@ const SAMPLE_RENTAL: RentalDto = {
   startDate: '2026-10-28',
   endDate: null,
   active: true,
+  managerCommissionPercent: 0,
 };
 
 const SAMPLE_TIMELINE: TimelineItem[] = [
@@ -671,6 +672,7 @@ describe('CarDetailModal and nested modals', () => {
           startDate: '2026-10-01',
           endDate: '2026-10-27',
           active: false,
+          managerCommissionPercent: 0,
           rentDebt30d: 2200,
         },
       ],
@@ -901,6 +903,7 @@ describe('CarDetailModal and nested modals', () => {
           startDate: '2026-09-01',
           endDate: null,
           active: false,
+          managerCommissionPercent: 0,
           rentDebt30d: 0,
         },
       ],

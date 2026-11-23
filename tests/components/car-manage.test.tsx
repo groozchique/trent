@@ -136,6 +136,7 @@ const SAMPLE_CAR: CarDetailDto = {
     startDate: '2026-11-01',
     endDate: null,
     active: true,
+    managerCommissionPercent: 0,
   },
   rentalHistory: [],
   timeline: [],
@@ -1054,6 +1055,7 @@ describe('CarManageClient', () => {
         periodicity: 'weekly',
         startDate: '2026-11-25',
         active: true,
+        managerCommissionPercent: 0,
       });
     });
 
@@ -1181,6 +1183,7 @@ describe('CarManageClient', () => {
           periodicity: 'daily',
           startDate: '2026-11-21',
           active: true,
+          managerCommissionPercent: 0,
         }),
       });
     });
@@ -1203,6 +1206,7 @@ describe('CarManageClient', () => {
           startDate: '2026-11-01',
           endDate: null,
           active: true,
+          managerCommissionPercent: 0,
           rentDebt30d: 0,
         },
         {
@@ -1216,6 +1220,7 @@ describe('CarManageClient', () => {
           startDate: '2026-10-01',
           endDate: '2026-10-31',
           active: false,
+          managerCommissionPercent: 0,
           rentDebt30d: 14000,
         },
       ],

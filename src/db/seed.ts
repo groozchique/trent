@@ -135,6 +135,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
       startDate: isoDateOffset(baseUtcMs, -24),
       endDate: null,
       active: true,
+      managerCommissionPercent: 15,
     },
     {
       carId: hyundai.id,
@@ -145,6 +146,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
       startDate: isoDateOffset(baseUtcMs, -10),
       endDate: null,
       active: true,
+      managerCommissionPercent: 10,
     },
     {
       carId: skoda.id,
@@ -155,6 +157,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
       startDate: isoDateOffset(baseUtcMs, -45),
       endDate: isoDateOffset(baseUtcMs, -3),
       active: false,
+      managerCommissionPercent: 15,
     },
   ];
 

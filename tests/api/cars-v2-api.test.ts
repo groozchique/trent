@@ -1000,4 +1000,122 @@ describe('Car v2 API routes (lifecycle, fines status, documents, maintenance edi
     expect(clearedBody.deadlines.status).toBe('ok');
     expect(clearedBody.deadlines.urgentDeadlinesCount).toBe(0);
   });
+
+  it('persists, defaults, reads back, and validates managerCommissionPercent on PUT /api/cars/[id]/rental and GET /api/cars/[id]', async () => {
+    await loginAs('admin');
+    const db = mockState.db!;
+
+    const [car] = await db
+      .insert(cars)
+      .values({ plate: 'К555КК 777', brand: 'Kia', model: 'Rio', status: 'available', mileage: 25000 })
+      .returning();
+    const [driver] = await db
+      .insert(drivers)
+      .values({ fullName: 'Волков Сергей Иванович', phone: '+7 916 555-55-55' })
+      .returning();
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    // 1. Omitted managerCommissionPercent defaults to 0
+    const defaultRes = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2200,
+        periodicity: 'daily',
+        startDate: todayIso,
+      }),
+      idCtx(car.id),
+    );
+    expect(defaultRes.status).toBe(200);
+    const defaultBody = (await defaultRes.json()) as {
+      rental: { managerCommissionPercent: number };
+    };
+    expect(defaultBody.rental.managerCommissionPercent).toBe(0);
+
+    // 2. Saving integer 15
+    const intRes = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2200,
+        periodicity: 'daily',
+        startDate: todayIso,
+        managerCommissionPercent: 15,
+      }),
+      idCtx(car.id),
+    );
+    expect(intRes.status).toBe(200);
+    const intBody = (await intRes.json()) as {
+      rental: { managerCommissionPercent: number };
+    };
+    expect(intBody.rental.managerCommissionPercent).toBe(15);
+
+    // Reading back via GET /api/cars/[id] (rental & rentalHistory)
+    const detailAfterInt = await getCarDetailGet(new Request('http://localhost/api/cars'), idCtx(car.id));
+    expect(detailAfterInt.status).toBe(200);
+    const detailIntBody = (await detailAfterInt.json()) as {
+      car: {
+        rental: { managerCommissionPercent: number } | null;
+        rentalHistory: Array<{ managerCommissionPercent: number }>;
+      };
+    };
+    expect(detailIntBody.car.rental?.managerCommissionPercent).toBe(15);
+    expect(detailIntBody.car.rentalHistory[0]?.managerCommissionPercent).toBe(15);
+
+    // 3. Saving decimal 12.5
+    const decimalRes = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2200,
+        periodicity: 'daily',
+        startDate: todayIso,
+        managerCommissionPercent: 12.5,
+      }),
+      idCtx(car.id),
+    );
+    expect(decimalRes.status).toBe(200);
+    const decimalBody = (await decimalRes.json()) as {
+      rental: { managerCommissionPercent: number };
+    };
+    expect(decimalBody.rental.managerCommissionPercent).toBe(12.5);
+
+    const detailAfterDecimal = await getCarDetailGet(new Request('http://localhost/api/cars'), idCtx(car.id));
+    expect(detailAfterDecimal.status).toBe(200);
+    const detailDecimalBody = (await detailAfterDecimal.json()) as {
+      car: {
+        rental: { managerCommissionPercent: number } | null;
+        rentalHistory: Array<{ managerCommissionPercent: number }>;
+      };
+    };
+    expect(detailDecimalBody.car.rental?.managerCommissionPercent).toBe(12.5);
+    expect(detailDecimalBody.car.rentalHistory[0]?.managerCommissionPercent).toBe(12.5);
+
+    // 4. Rejecting < 0 and > 100 with 400 and Russian error message
+    const negativeRes = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2200,
+        periodicity: 'daily',
+        startDate: todayIso,
+        managerCommissionPercent: -1,
+      }),
+      idCtx(car.id),
+    );
+    expect(negativeRes.status).toBe(400);
+    const negativeBody = (await negativeRes.json()) as { error: string };
+    expect(negativeBody.error).toContain('Процент менеджера не может быть меньше 0');
+
+    const overRes = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2200,
+        periodicity: 'daily',
+        startDate: todayIso,
+        managerCommissionPercent: 100.5,
+      }),
+      idCtx(car.id),
+    );
+    expect(overRes.status).toBe(400);
+    const overBody = (await overRes.json()) as { error: string };
+    expect(overBody.error).toContain('Процент менеджера не может быть больше 100');
+  });
 });

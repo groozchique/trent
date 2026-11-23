@@ -295,7 +295,7 @@ describe('v1 -> v2 idempotent database migration', () => {
       ).toThrow(/UNIQUE/);
 
       const userVersion = db2.get<{ user_version: number }>(sql`PRAGMA user_version`);
-      expect(userVersion?.user_version).toBe(2);
+      expect(userVersion?.user_version).toBe(3);
     } finally {
       closeAppDb(db2);
     }
@@ -363,7 +363,7 @@ describe('v1 -> v2 idempotent database migration', () => {
       expect(rentalAfter?.driverId).toBeNull();
       expect(rentalAfter?.renterName).toBe('Сидоров Иван');
       expect(fineAfter?.driverId).toBeNull();
-      expect(db2.get<{ user_version: number }>(sql`PRAGMA user_version`)?.user_version).toBe(2);
+      expect(db2.get<{ user_version: number }>(sql`PRAGMA user_version`)?.user_version).toBe(3);
     } finally {
       closeAppDb(db2);
     }
@@ -435,6 +435,160 @@ describe('v1 -> v2 idempotent database migration', () => {
       expect(indexes.map((i) => i.name)).toContain('rentals_active_car_unique');
     } finally {
       closeAppDb(db);
+    }
+  });
+
+  it('migrates v2 database to v3 by adding manager_commission_percent with default 0 idempotently', () => {
+    const dbPath = makeTempDbPath();
+    const raw = new Database(dbPath);
+    raw.pragma('foreign_keys = ON');
+    raw.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        username TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX users_username_unique ON users (username);
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY NOT NULL,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE TABLE drivers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        full_name TEXT NOT NULL,
+        phone TEXT,
+        notes TEXT,
+        archived INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE cars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        plate TEXT NOT NULL,
+        brand TEXT NOT NULL,
+        model TEXT NOT NULL,
+        status TEXT NOT NULL,
+        mileage INTEGER NOT NULL DEFAULT 0,
+        sts_number TEXT,
+        next_service_mileage INTEGER,
+        next_service_date TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX cars_plate_unique ON cars (plate);
+      CREATE TABLE car_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        car_id INTEGER NOT NULL REFERENCES cars(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        policy_number TEXT,
+        notes TEXT
+      );
+      CREATE UNIQUE INDEX car_documents_car_type_idx ON car_documents (car_id, type);
+      CREATE TABLE rentals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        car_id INTEGER NOT NULL REFERENCES cars(id) ON DELETE CASCADE,
+        driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+        renter_name TEXT NOT NULL,
+        rate_amount INTEGER NOT NULL,
+        periodicity TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        active INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE UNIQUE INDEX rentals_active_car_unique ON rentals (car_id) WHERE active = 1;
+      CREATE TABLE rental_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        rental_id INTEGER NOT NULL REFERENCES rentals(id) ON DELETE CASCADE,
+        due_date TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        paid_at TEXT
+      );
+      CREATE UNIQUE INDEX rental_payments_rental_due_idx ON rental_payments (rental_id, due_date);
+      CREATE TABLE fines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        car_id INTEGER NOT NULL REFERENCES cars(id) ON DELETE CASCADE,
+        driver_id INTEGER REFERENCES drivers(id) ON DELETE SET NULL,
+        resolution_number TEXT NOT NULL,
+        violated_at TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        discount_amount INTEGER,
+        discount_deadline TEXT,
+        payment_deadline TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX fines_resolution_number_unique ON fines (resolution_number);
+      CREATE TABLE maintenance_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        car_id INTEGER NOT NULL REFERENCES cars(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        performed_at TEXT NOT NULL,
+        mileage INTEGER NOT NULL,
+        labor_cost INTEGER NOT NULL,
+        total_cost INTEGER NOT NULL,
+        notes TEXT
+      );
+      CREATE TABLE maintenance_parts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        record_id INTEGER NOT NULL REFERENCES maintenance_records(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        sku TEXT,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        unit_price INTEGER NOT NULL
+      );
+      PRAGMA user_version = 2;
+    `);
+    raw
+      .prepare(
+        `INSERT INTO cars (id, plate, brand, model, status, mileage, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(1, 'Н001НН 777', 'Kia', 'Rio', 'in_rent', 50000, '2026-10-01T00:00:00Z');
+    raw
+      .prepare(
+        `INSERT INTO drivers (id, full_name, archived, created_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .run(1, 'Козлов Павел', 0, '2026-10-01T00:00:00Z');
+    raw
+      .prepare(
+        `INSERT INTO rentals (id, car_id, driver_id, renter_name, rate_amount, periodicity, start_date, end_date, active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(1, 1, 1, 'Козлов Павел', 2200, 'daily', '2026-10-01', null, 1);
+    raw.close();
+
+    const db1 = createDb(dbPath);
+    try {
+      const userVersion = db1.get<{ user_version: number }>(sql`PRAGMA user_version`);
+      expect(userVersion?.user_version).toBe(3);
+
+      const cols = db1.all<{ name: string }>(sql`PRAGMA table_info('rentals')`);
+      expect(cols.map((c) => c.name)).toContain('manager_commission_percent');
+
+      const [rental] = db1.select().from(rentals).all();
+      expect(rental).toMatchObject({
+        id: 1,
+        carId: 1,
+        driverId: 1,
+        renterName: 'Козлов Павел',
+        rateAmount: 2200,
+        managerCommissionPercent: 0,
+      });
+    } finally {
+      closeAppDb(db1);
+    }
+
+    const db2 = createDb(dbPath);
+    try {
+      const userVersion = db2.get<{ user_version: number }>(sql`PRAGMA user_version`);
+      expect(userVersion?.user_version).toBe(3);
+      const [rental] = db2.select().from(rentals).all();
+      expect(rental?.managerCommissionPercent).toBe(0);
+    } finally {
+      closeAppDb(db2);
     }
   });
 });

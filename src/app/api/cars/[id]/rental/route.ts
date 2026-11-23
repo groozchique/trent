@@ -71,6 +71,7 @@ export async function PUT(request: Request, context: RouteIdContext) {
         startDate: data.startDate,
         endDate: nextEndDate,
         active: data.active,
+        managerCommissionPercent: data.managerCommissionPercent,
       };
 
       const savedRental =

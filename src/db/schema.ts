@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export type UserRole = 'admin' | 'viewer';
 export type CarStatus = 'in_rent' | 'in_repair' | 'available';
@@ -80,6 +80,7 @@ export const rentals = sqliteTable(
     startDate: text('start_date').notNull(),
     endDate: text('end_date'),
     active: integer('active', { mode: 'boolean' }).notNull().default(true),
+    managerCommissionPercent: real('manager_commission_percent').notNull().default(0),
   },
   (table) => [uniqueIndex('rentals_active_car_unique').on(table.carId).where(sql`active = 1`)],
 );

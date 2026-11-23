@@ -237,6 +237,7 @@ export async function getDriverDetail(
         startDate: rental.startDate,
         endDate: rental.endDate,
         active: rental.active,
+        managerCommissionPercent: rental.managerCommissionPercent,
         rentDebt30d,
         carPlate,
         carBrand,
