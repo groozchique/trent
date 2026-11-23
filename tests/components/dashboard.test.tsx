@@ -281,7 +281,7 @@ describe('DashboardClient', () => {
     expect(refreshMock).toHaveBeenCalled();
   });
 
-  it('renders 4 KPI strip cards, filters urgent deadlines with «Сроки», and searches by activeDriverName', async () => {
+  it('renders 4 KPI cards in exact order when totalRentDebt30d > 0 and filters urgent deadlines with «Сроки»', () => {
     const carsWithDeadlines: CarSummaryDto[] = [
       {
         ...SAMPLE_CARS[0],
@@ -309,11 +309,11 @@ describe('DashboardClient', () => {
       totalUnpaidFinesSum: 3750,
       totalUnpaidFinesCount: 3,
       paidRental30d: 32000,
-      managerIncome30d: 0,
-      paidRentalMonth: 0,
-      managerIncomeMonth: 0,
+      managerIncome30d: 3200,
+      paidRentalMonth: 18000,
+      managerIncomeMonth: 1800,
       maintenanceCost30d: 9600,
-      netIncome30d: 22400,
+      netIncome30d: 19200,
       urgentDeadlineCarsCount: 2,
     };
 
@@ -325,27 +325,35 @@ describe('DashboardClient', () => {
       />,
     );
 
-    const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка и сроки' });
+    const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка' });
     expect(
       Array.from(kpiRegion.children).map((card) => card.firstElementChild?.textContent?.trim()),
     ).toEqual([
+      'Аренда за месяц',
+      'Доход менеджера за месяц',
       'Итог за 30 дней',
-      'Неоплаченные штрафы',
-      'Сроки документов и ТО',
       'Долг по аренде',
     ]);
-    expect(within(kpiRegion).getByText('Долг по аренде')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('18 000 ₽')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('Оплачено с 1-го числа')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('1 800 ₽')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('Комиссия с оплаченной аренды')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('+19 200 ₽')).toBeInTheDocument();
+    expect(
+      within(kpiRegion).getByText('Аренда 32 000 ₽, менеджер 3 200 ₽, ремонт 9 600 ₽'),
+    ).toBeInTheDocument();
     expect(within(kpiRegion).getByText('4 800 ₽')).toBeInTheDocument();
-    expect(within(kpiRegion).getByText('Неоплаченные штрафы')).toBeInTheDocument();
-    expect(within(kpiRegion).getByText('3 750 ₽')).toBeInTheDocument();
-    expect(within(kpiRegion).getByText(/3 шт\./)).toBeInTheDocument();
-    expect(within(kpiRegion).getByText('Итог за 30 дней')).toBeInTheDocument();
-    expect(within(kpiRegion).getByText('+22 400 ₽')).toBeInTheDocument();
-    expect(within(kpiRegion).getByText('Сроки документов и ТО')).toBeInTheDocument();
-    expect(within(kpiRegion).getByText('2')).toBeInTheDocument();
+    expect(within(kpiRegion).getByText('Просрочено за 30 дн.')).toBeInTheDocument();
 
-    // Toggle urgent deadlines via filter button
-    const urgentFilterBtn = screen.getByRole('button', { name: 'Сроки' });
+    // Old KPI cards are removed
+    expect(within(kpiRegion).queryByText('Неоплаченные штрафы')).not.toBeInTheDocument();
+    expect(within(kpiRegion).queryByText('Сроки документов и ТО')).not.toBeInTheDocument();
+
+    // Toggle urgent deadlines via filter button (with quiet tabular count)
+    const filtersRegion = screen.getByRole('region', { name: 'Фильтры и поиск' });
+    const urgentFilterBtn = within(filtersRegion).getByRole('button', { name: /Сроки/i });
+    expect(screen.getByRole('button', { name: /^Сроки/i })).toBe(urgentFilterBtn);
+    expect(urgentFilterBtn).toHaveTextContent('Сроки (2)');
     fireEvent.click(urgentFilterBtn);
     expect(urgentFilterBtn).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText('А123ВС 777')).not.toBeInTheDocument();
@@ -362,19 +370,9 @@ describe('DashboardClient', () => {
     expect(screen.getByText('В456ОР 777')).toBeInTheDocument();
     expect(screen.queryByText('А123ВС 777')).not.toBeInTheDocument();
     expect(screen.queryByText('Е789КХ 799')).not.toBeInTheDocument();
-
-    fireEvent.change(searchInput, { target: { value: '' } });
-
-    // KPI card itself toggles the urgent deadlines filter
-    const kpiDeadlinesBtn = within(kpiRegion).getByRole('button', {
-      name: /Сроки документов и ТО/i,
-    });
-    fireEvent.click(kpiDeadlinesBtn);
-    expect(kpiDeadlinesBtn).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('А123ВС 777')).not.toBeInTheDocument();
   });
 
-  it('displays negative 30d net income with minus sign when maintenance exceeds paid rent', () => {
+  it('renders 3 KPI cards and hides «Долг по аренде» when totalRentDebt30d === 0, and formats negative 30d net income', () => {
     render(
       <DashboardClient
         initialCars={SAMPLE_CARS}
@@ -383,19 +381,41 @@ describe('DashboardClient', () => {
           totalUnpaidFinesSum: 0,
           totalUnpaidFinesCount: 0,
           paidRental30d: 4000,
-          managerIncome30d: 0,
-          paidRentalMonth: 0,
-          managerIncomeMonth: 0,
+          managerIncome30d: 500,
+          paidRentalMonth: 4000,
+          managerIncomeMonth: 500,
           maintenanceCost30d: 7500,
-          netIncome30d: -3500,
+          netIncome30d: -4000,
           urgentDeadlineCarsCount: 0,
         }}
         userRole="viewer"
       />,
     );
 
-    const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка и сроки' });
-    expect(within(kpiRegion).getByText('-3 500 ₽')).toBeInTheDocument();
+    const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка' });
+    expect(
+      Array.from(kpiRegion.children).map((card) => card.firstElementChild?.textContent?.trim()),
+    ).toEqual([
+      'Аренда за месяц',
+      'Доход менеджера за месяц',
+      'Итог за 30 дней',
+    ]);
+    expect(within(kpiRegion).queryByText('Долг по аренде')).not.toBeInTheDocument();
+    expect(within(kpiRegion).getByText('-4 000 ₽')).toBeInTheDocument();
+    expect(
+      within(kpiRegion).getByText('Аренда 4 000 ₽, менеджер 500 ₽, ремонт 7 500 ₽'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Сроки' })).toHaveTextContent('Сроки');
+  });
+
+  it('renders empty state copy without штрафы when fleet is empty', () => {
+    render(<DashboardClient initialCars={[]} userRole="admin" />);
+
+    expect(
+      screen.getByText(
+        'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, документы и ТО.',
+      ),
+    ).toBeInTheDocument();
   });
 });
 

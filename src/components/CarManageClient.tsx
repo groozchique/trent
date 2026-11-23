@@ -948,6 +948,9 @@ function RentalTab({
   const [startDate, setStartDate] = useState(
     () => car.rental?.startDate ?? new Date().toISOString().slice(0, 10),
   );
+  const [managerCommissionPercent, setManagerCommissionPercent] = useState(
+    car.rental ? String(car.rental.managerCommissionPercent ?? 0) : '0',
+  );
   const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const [showNewDriver, setShowNewDriver] = useState(false);
@@ -966,12 +969,18 @@ function RentalTab({
   const rentalRateAmount = car.rental?.rateAmount;
   const rentalPeriodicity = car.rental?.periodicity;
   const rentalStartDate = car.rental?.startDate;
+  const rentalManagerCommissionPercent = car.rental?.managerCommissionPercent;
 
   useEffect(() => {
     setDriverId(rentalDriverId !== null ? String(rentalDriverId) : '');
     setRateAmount(rentalRateAmount !== undefined ? String(rentalRateAmount) : '');
     setPeriodicity(rentalPeriodicity ?? 'daily');
     setStartDate(rentalStartDate ?? new Date().toISOString().slice(0, 10));
+    setManagerCommissionPercent(
+      rentalManagerCommissionPercent !== undefined
+        ? String(rentalManagerCommissionPercent)
+        : '0',
+    );
     setEndDate(new Date().toISOString().slice(0, 10));
   }, [
     car.id,
@@ -980,6 +989,7 @@ function RentalTab({
     rentalRateAmount,
     rentalPeriodicity,
     rentalStartDate,
+    rentalManagerCommissionPercent,
   ]);
 
   const driverOptions = useMemo(() => {
@@ -1057,6 +1067,7 @@ function RentalTab({
       periodicity,
       startDate,
       active: true,
+      managerCommissionPercent: parseRequiredNumber(managerCommissionPercent.replace(',', '.')),
     });
 
     if (!parsed.success) {
@@ -1348,6 +1359,26 @@ function RentalTab({
               className={`${INPUT_CLASS} tabular-nums`}
             />
           </div>
+
+          <div>
+            <label htmlFor="rental-manager-commission" className={LABEL_CLASS}>
+              Процент менеджера, %
+            </label>
+            <input
+              id="rental-manager-commission"
+              name="managerCommissionPercent"
+              type="number"
+              min={0}
+              max={100}
+              step="0.5"
+              inputMode="decimal"
+              value={managerCommissionPercent}
+              onChange={(event) => setManagerCommissionPercent(event.target.value)}
+              disabled={busy}
+              placeholder="0"
+              className={`${INPUT_CLASS} tabular-nums`}
+            />
+          </div>
         </div>
 
         <FeedbackBanner feedback={feedback} />
@@ -1436,6 +1467,9 @@ function RentalTab({
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-[var(--text-secondary)] tabular-nums">
                     <span>{formatRentalPeriod(item.startDate, item.endDate)}</span>
                     {item.driverPhone && <span>{item.driverPhone}</span>}
+                    {item.managerCommissionPercent > 0 && (
+                      <span>Менеджер: {item.managerCommissionPercent}%</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:justify-end">

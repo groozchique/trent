@@ -1234,6 +1234,7 @@ describe('CarManageClient', () => {
       startDate: '2026-11-01',
       endDate: '2026-11-21',
       active: false,
+      managerCommissionPercent: 0,
     };
 
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -1297,6 +1298,125 @@ describe('CarManageClient', () => {
     expect(screen.queryByRole('region', { name: 'Завершение аренды' })).not.toBeInTheDocument();
     expect(within(historySection).getByText('История аренд (2)')).toBeInTheDocument();
     expect(within(historySection).getByText('с 01.11.2026 по 21.11.2026')).toBeInTheDocument();
+  });
+
+  it('renders «Процент менеджера, %» prefilled, validates 0..100 client-side, submits decimal 12.5, and shows commission in rental history when > 0', async () => {
+    const carWithCommission: CarDetailDto = {
+      ...SAMPLE_CAR,
+      rental: {
+        ...SAMPLE_CAR.rental!,
+        managerCommissionPercent: 10,
+      },
+      rentalHistory: [
+        {
+          id: 2,
+          carId: 7,
+          driverId: 2,
+          renterName: 'Петров Дмитрий Иванович',
+          driverPhone: '+7 916 222-33-44',
+          rateAmount: 14000,
+          periodicity: 'weekly',
+          startDate: '2026-10-01',
+          endDate: '2026-10-31',
+          active: false,
+          managerCommissionPercent: 15,
+          rentDebt30d: 0,
+        },
+        {
+          id: 1,
+          carId: 7,
+          driverId: 1,
+          renterName: 'Иванов Алексей Сергеевич',
+          driverPhone: '+7 916 111-22-33',
+          rateAmount: 2400,
+          periodicity: 'daily',
+          startDate: '2026-09-01',
+          endDate: '2026-09-30',
+          active: false,
+          managerCommissionPercent: 0,
+          rentDebt30d: 0,
+        },
+      ],
+    };
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/cars/7/rental' && init?.method === 'PUT') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            rental: {
+              ...carWithCommission.rental!,
+              managerCommissionPercent: 12.5,
+            },
+            carStatus: 'in_rent',
+          }),
+        });
+      }
+      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            car: {
+              ...carWithCommission,
+              rental: {
+                ...carWithCommission.rental!,
+                managerCommissionPercent: 12.5,
+              },
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CarManageClient car={carWithCommission} drivers={SAMPLE_DRIVERS} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Аренда' }));
+
+    const commissionInput = screen.getByLabelText('Процент менеджера, %');
+    expect(commissionInput).toHaveValue(10);
+
+    const historySection = screen.getByRole('region', { name: 'История аренд' });
+    expect(within(historySection).getByText('Менеджер: 15%')).toBeInTheDocument();
+    expect(within(historySection).queryByText('Менеджер: 0%')).not.toBeInTheDocument();
+
+    fireEvent.change(commissionInput, { target: { value: '-5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить аренду' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Процент менеджера не может быть меньше 0');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.change(commissionInput, { target: { value: '101' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить аренду' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Процент менеджера не может быть больше 100');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.change(commissionInput, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить аренду' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Укажите процент менеджера');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.change(commissionInput, { target: { value: '12.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить аренду' }));
+
+    await waitFor(() => {
+      const rentalCall = fetchMock.mock.calls.find(
+        ([url, init]) => url === '/api/cars/7/rental' && init?.method === 'PUT',
+      );
+      expect(rentalCall).toBeDefined();
+      const parsedBody = JSON.parse(String(rentalCall?.[1]?.body));
+      expect(parsedBody).toEqual({
+        driverId: 1,
+        rateAmount: 2400,
+        periodicity: 'daily',
+        startDate: '2026-11-01',
+        active: true,
+        managerCommissionPercent: 12.5,
+      });
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Настройки аренды сохранены/i);
   });
 
   it('renders DELETE error inside delete confirmation section and syncs MaintenanceTab mileage when car prop updates', async () => {

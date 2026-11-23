@@ -156,9 +156,33 @@ export function DashboardClient({
       </div>
 
       <section
-        aria-label="Финансовая сводка и сроки"
-        className="mt-4 grid grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3 lg:grid-cols-4"
+        aria-label="Финансовая сводка"
+        className={
+          summary.totalRentDebt30d > 0
+            ? 'mt-4 grid grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3 lg:grid-cols-4'
+            : 'mt-4 grid grid-cols-1 gap-2.5 sm:mt-5 sm:grid-cols-3 sm:gap-3'
+        }
       >
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Аренда за месяц</p>
+          <p className="mt-1.5 text-lg font-semibold tracking-tight text-[var(--text-primary)] tabular-nums sm:text-xl">
+            {formatRub(summary.paidRentalMonth)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">Оплачено с 1-го числа</p>
+        </div>
+
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">
+            Доход менеджера за месяц
+          </p>
+          <p className="mt-1.5 text-lg font-semibold tracking-tight text-[var(--text-primary)] tabular-nums sm:text-xl">
+            {formatRub(summary.managerIncomeMonth)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            Комиссия с оплаченной аренды
+          </p>
+        </div>
+
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
           <p className="text-xs font-medium text-[var(--text-secondary)]">Итог за 30 дней</p>
           <p
@@ -175,88 +199,23 @@ export function DashboardClient({
             {formatSignedRub(summary.netIncome30d)}
           </p>
           <p className="mt-1 text-xs text-[var(--text-secondary)] tabular-nums">
-            Аренда {formatRub(summary.paidRental30d)}, ремонт {formatRub(summary.maintenanceCost30d)}
+            Аренда {formatRub(summary.paidRental30d)}, менеджер{' '}
+            {formatRub(summary.managerIncome30d)}, ремонт {formatRub(summary.maintenanceCost30d)}
           </p>
         </div>
 
-        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
-          <p className="text-xs font-medium text-[var(--text-secondary)]">Неоплаченные штрафы</p>
-          <p
-            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
-            style={{
-              color:
-                summary.totalUnpaidFinesSum > 0
-                  ? 'var(--status-repair-text)'
-                  : 'var(--text-primary)',
-            }}
-          >
-            {formatRub(summary.totalUnpaidFinesSum)}
-          </p>
-          <p className="mt-1 text-xs text-[var(--text-secondary)] tabular-nums">
-            {summary.totalUnpaidFinesCount > 0
-              ? `${summary.totalUnpaidFinesCount} шт.`
-              : 'Неоплаченных нет'}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          aria-pressed={onlyUrgentDeadlines}
-          onClick={() => setOnlyUrgentDeadlines((prev) => !prev)}
-          style={
-            onlyUrgentDeadlines
-              ? {
-                  backgroundColor: 'var(--status-overdue-bg)',
-                  borderColor: 'var(--status-overdue-border)',
-                }
-              : undefined
-          }
-          className={`flex cursor-pointer flex-col rounded-xl border p-3 text-left transition-colors sm:p-4 ${
-            onlyUrgentDeadlines
-              ? ''
-              : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]/45'
-          }`}
-        >
-          <span className="text-xs font-medium text-[var(--text-secondary)]">
-            Сроки документов и ТО
-          </span>
-          <span
-            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
-            style={{
-              color:
-                summary.urgentDeadlineCarsCount > 0
-                  ? hasExpiredDeadlines
-                    ? 'var(--status-repair-text)'
-                    : 'var(--status-overdue-text)'
-                  : 'var(--text-primary)',
-            }}
-          >
-            {summary.urgentDeadlineCarsCount}
-          </span>
-          <span className="mt-1 text-xs text-[var(--text-secondary)]">
-            {onlyUrgentDeadlines
-              ? 'Фильтр «Сроки» включён'
-              : summary.urgentDeadlineCarsCount > 0
-                ? 'Нажмите для отбора'
-                : 'Все сроки в норме'}
-          </span>
-        </button>
-
-        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
-          <p className="text-xs font-medium text-[var(--text-secondary)]">Долг по аренде</p>
-          <p
-            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
-            style={{
-              color:
-                summary.totalRentDebt30d > 0 ? 'var(--status-overdue-text)' : 'var(--text-primary)',
-            }}
-          >
-            {formatRub(summary.totalRentDebt30d)}
-          </p>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            {summary.totalRentDebt30d > 0 ? 'Просрочено за 30 дн.' : 'Просрочек за 30 дн. нет'}
-          </p>
-        </div>
+        {summary.totalRentDebt30d > 0 && (
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+            <p className="text-xs font-medium text-[var(--text-secondary)]">Долг по аренде</p>
+            <p
+              className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
+              style={{ color: 'var(--status-overdue-text)' }}
+            >
+              {formatRub(summary.totalRentDebt30d)}
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">Просрочено за 30 дн.</p>
+          </div>
+        )}
       </section>
 
       <section
@@ -314,6 +273,18 @@ export function DashboardClient({
               />
             )}
             <span>Сроки</span>
+            {summary.urgentDeadlineCarsCount > 0 && (
+              <>
+                {' '}
+                <span
+                  className={`tabular-nums ${
+                    onlyUrgentDeadlines ? 'opacity-80' : 'text-[var(--text-muted)]'
+                  }`}
+                >
+                  ({summary.urgentDeadlineCarsCount})
+                </span>
+              </>
+            )}
           </button>
         </div>
 
@@ -348,7 +319,7 @@ export function DashboardClient({
           <p className="text-sm font-medium text-[var(--text-primary)]">Машин пока нет</p>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
             {userRole === 'admin'
-              ? 'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, штрафы и ТО.'
+              ? 'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, документы и ТО.'
               : 'Попросите администратора добавить машины.'}
           </p>
         </div>
