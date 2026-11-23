@@ -3,7 +3,13 @@ import type { AppDb } from '@/db';
 import { cars, maintenanceRecords, rentalPayments, rentals } from '@/db/schema';
 import { ApiError } from '@/lib/cars';
 import { groupPaymentsByRental, sumPaidAndManagerInRange } from '@/lib/finances';
-import { formatDateRu, formatRub, parseUtcDateMs, shiftUtcDaysIso } from '@/lib/format';
+import {
+  formatDateRu,
+  formatSignedRubPlain,
+  parseUtcDateMs,
+  shiftUtcDaysIso,
+} from '@/lib/format';
+export { formatSignedRubPlain };
 import type { CarReportBreakdown, FleetReportDto, ReportPeriodType } from '@/lib/validation';
 
 const YEAR_MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
@@ -57,11 +63,6 @@ export function formatReportPeriodLabel(
   }
   const dt = new Date(parseUtcDateMs(start));
   return `${RU_MONTH_NAMES[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`;
-}
-
-/** Format signed ruble amount deterministically across Node locales (ASCII minus for negatives). */
-export function formatSignedRubPlain(amount: number): string {
-  return amount < 0 ? `-${formatRub(Math.abs(amount))}` : formatRub(amount);
 }
 
 /** Format fleet report as plain text or Telegram standard Markdown (`**bold**`, no escapes). */

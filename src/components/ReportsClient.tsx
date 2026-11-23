@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
-import { shiftUtcDaysIso } from '@/lib/format';
-import { formatSignedRubPlain } from '@/lib/reports';
+import { formatSignedRubPlain, shiftUtcDaysIso } from '@/lib/format';
 import type { FleetReportDto, ReportPeriodType } from '@/lib/validation';
 
 export type ReportCarOption = {
@@ -17,6 +16,37 @@ type PreviewFormat = 'telegram' | 'plain';
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const YEAR_MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+
+function isValidIsoDate(value: string): boolean {
+  if (!ISO_DATE_RE.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+function buildReportQueryString(params: {
+  type: ReportPeriodType;
+  anchorDate: string;
+  monthValue: string;
+  selectedCarId: string;
+  includeMaintenance: boolean;
+}): string {
+  const search = new URLSearchParams();
+  search.set('type', params.type);
+  if (params.type === 'weekly') {
+    search.set('date', params.anchorDate);
+  } else {
+    search.set('month', params.monthValue);
+  }
+  if (params.selectedCarId !== '') {
+    search.set('carId', params.selectedCarId);
+  }
+  search.set(
+    'includeMaintenance',
+    params.type === 'monthly' ? 'true' : String(params.includeMaintenance),
+  );
+  return search.toString();
+}
 
 /** Shift `YYYY-MM` by `deltaMonths` UTC calendar months across year boundaries. */
 function shiftYearMonth(yearMonth: string, deltaMonths: number): string {
@@ -69,44 +99,54 @@ export function ReportsClient({
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
 
-  const skipInitialFetchRef = useRef<boolean>(true);
+  const lastQueryKeyRef = useRef<string>(
+    `${buildReportQueryString({
+      type: initialReport.type,
+      anchorDate: initialDate,
+      monthValue: initialMonth,
+      selectedCarId: initialReport.carId === null ? '' : String(initialReport.carId),
+      includeMaintenance: initialReport.includeMaintenance,
+    })}|0`,
+  );
+  const mountedRef = useRef<boolean>(true);
   const abortControllerRef = useRef<AbortController | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (skipInitialFetchRef.current) {
-      skipInitialFetchRef.current = false;
+    if (type === 'weekly' && !isValidIsoDate(anchorDate)) {
+      lastQueryKeyRef.current = 'invalid';
+      setLoading(false);
+      return;
+    }
+    if (type === 'monthly' && !YEAR_MONTH_RE.test(monthValue)) {
+      lastQueryKeyRef.current = 'invalid';
+      setLoading(false);
       return;
     }
 
-    if (type === 'weekly' && !ISO_DATE_RE.test(anchorDate)) return;
-    if (type === 'monthly' && !YEAR_MONTH_RE.test(monthValue)) return;
+    const queryString = buildReportQueryString({
+      type,
+      anchorDate,
+      monthValue,
+      selectedCarId,
+      includeMaintenance,
+    });
+    const queryKey = `${queryString}|${retryTick}`;
+    if (lastQueryKeyRef.current === queryKey) {
+      return;
+    }
+    lastQueryKeyRef.current = queryKey;
 
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
-    const params = new URLSearchParams();
-    params.set('type', type);
-    if (type === 'weekly') {
-      params.set('date', anchorDate);
-    } else {
-      params.set('month', monthValue);
-    }
-    if (selectedCarId !== '') {
-      params.set('carId', selectedCarId);
-    }
-    params.set(
-      'includeMaintenance',
-      type === 'monthly' ? 'true' : String(includeMaintenance),
-    );
 
     setLoading(true);
     setError(null);
 
     void (async () => {
       try {
-        const response = await fetch(`/api/reports?${params.toString()}`, {
+        const response = await fetch(`/api/reports?${queryString}`, {
           cache: 'no-store',
           signal: controller.signal,
         });
@@ -148,10 +188,13 @@ export function ReportsClient({
   }, [type, anchorDate, monthValue, selectedCarId, includeMaintenance, retryTick]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       abortControllerRef.current?.abort();
       if (copyTimerRef.current !== null) {
         clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
       }
     };
   }, []);
@@ -171,12 +214,16 @@ export function ReportsClient({
         throw new Error('Clipboard unavailable');
       }
       await clipboard.writeText(text);
+      if (!mountedRef.current) return;
       setCopyFeedback(format === 'telegram' ? 'Скопировано для Telegram' : 'Текст скопирован');
       copyTimerRef.current = setTimeout(() => {
-        setCopyFeedback(null);
         copyTimerRef.current = null;
+        if (mountedRef.current) {
+          setCopyFeedback(null);
+        }
       }, 2500);
     } catch {
+      if (!mountedRef.current) return;
       setCopyError('Не удалось скопировать в буфер обмена. Скопируйте текст вручную.');
     }
   }
@@ -248,7 +295,11 @@ export function ReportsClient({
               <button
                 type="button"
                 aria-label="Предыдущая неделя"
-                onClick={() => setAnchorDate((prev) => shiftUtcDaysIso(prev, -7))}
+                onClick={() =>
+                  setAnchorDate((prev) =>
+                    shiftUtcDaysIso(isValidIsoDate(prev) ? prev : initialDate, -7),
+                  )
+                }
                 className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -263,7 +314,11 @@ export function ReportsClient({
               <button
                 type="button"
                 aria-label="Следующая неделя"
-                onClick={() => setAnchorDate((prev) => shiftUtcDaysIso(prev, 7))}
+                onClick={() =>
+                  setAnchorDate((prev) =>
+                    shiftUtcDaysIso(isValidIsoDate(prev) ? prev : initialDate, 7),
+                  )
+                }
                 className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -274,7 +329,11 @@ export function ReportsClient({
               <button
                 type="button"
                 aria-label="Предыдущий месяц"
-                onClick={() => setMonthValue((prev) => shiftYearMonth(prev, -1))}
+                onClick={() =>
+                  setMonthValue((prev) =>
+                    shiftYearMonth(YEAR_MONTH_RE.test(prev) ? prev : initialMonth, -1),
+                  )
+                }
                 className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -289,7 +348,11 @@ export function ReportsClient({
               <button
                 type="button"
                 aria-label="Следующий месяц"
-                onClick={() => setMonthValue((prev) => shiftYearMonth(prev, 1))}
+                onClick={() =>
+                  setMonthValue((prev) =>
+                    shiftYearMonth(YEAR_MONTH_RE.test(prev) ? prev : initialMonth, 1),
+                  )
+                }
                 className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />

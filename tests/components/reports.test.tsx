@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { FleetReportDto } from '@/lib/validation';
@@ -412,5 +413,126 @@ describe('ReportsClient', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Копировать текст' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось скопировать');
+  });
+
+  it('does not fire a redundant mount fetch under React StrictMode', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <StrictMode>
+        <ReportsClient
+          initialReport={makeReport()}
+          cars={SAMPLE_CARS}
+          initialDate="2026-11-25"
+          initialMonth="2026-11"
+        />
+      </StrictMode>,
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('clears loading when date or month input is cleared mid-flight and recovers via steppers', async () => {
+    const signals: AbortSignal[] = [];
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal;
+      signals.push(signal);
+
+      if (signals.length === 1 || signals.length === 3) {
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          report: makeReport({
+            type: url.includes('type=monthly') ? 'monthly' : 'weekly',
+            includeMaintenance: url.includes('includeMaintenance=true'),
+          }),
+        }),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ReportsClient
+        initialReport={makeReport()}
+        cars={SAMPLE_CARS}
+        initialDate="2026-11-25"
+        initialMonth="2026-11"
+      />,
+    );
+
+    // Start in-flight weekly request, then clear date input
+    fireEvent.click(screen.getByLabelText('Учитывать ремонт'));
+    expect(screen.getByText('Загрузка...')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Дата недели'), { target: { value: '' } });
+    expect(signals[0]?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Загрузка...')).not.toBeInTheDocument();
+
+    // Clicking week stepper recovers cleanly using initialDate
+    fireEvent.click(screen.getByRole('button', { name: 'Предыдущая неделя' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[1][0]).toContain('date=2026-11-18');
+    expect(screen.queryByText('Загрузка...')).not.toBeInTheDocument();
+
+    // Switch to monthly (in-flight), then clear month input and recover via month stepper
+    fireEvent.click(screen.getByRole('button', { name: 'Ежемесячный' }));
+    expect(screen.getByText('Загрузка...')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Месяц отчёта'), { target: { value: '' } });
+    expect(signals[2]?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText('Загрузка...')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls[3][0]).toContain('month=2026-12');
+    expect(screen.queryByText('Загрузка...')).not.toBeInTheDocument();
+  });
+
+  it('retries failed report fetch when clicking Повторить', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Сбой сервера' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          report: makeReport({ includeMaintenance: true, ownerPayout: 19500 }),
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ReportsClient
+        initialReport={makeReport()}
+        cars={SAMPLE_CARS}
+        initialDate="2026-11-25"
+        initialMonth="2026-11"
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Учитывать ремонт'));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Не удалось загрузить отчёт: Сбой сервера');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('19 500 ₽')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

@@ -37,6 +37,11 @@ export function formatRub(amount: number): string {
   return `${formatRuNumber(amount)} ₽`;
 }
 
+/** Format signed ruble amount deterministically across Node locales (ASCII minus for negatives). */
+export function formatSignedRubPlain(amount: number): string {
+  return amount < 0 ? `-${formatRub(Math.abs(amount))}` : formatRub(amount);
+}
+
 /** Format an ISO date or timestamp as `DD.MM.YYYY` without local TZ shifts. */
 export function formatDateRu(iso: string): string {
   const match = ISO_PREFIX_RE.exec(iso.trim());

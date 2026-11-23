@@ -238,6 +238,10 @@ describe('TopBar', () => {
       'page',
     );
 
+    pathnameMock.mockReturnValue('/reports/123');
+    rerender(<TopBar user={{ id: 2, username: 'viewer', role: 'viewer' }} />);
+    expect(screen.getByRole('link', { name: 'Отчёты' })).toHaveAttribute('aria-current', 'page');
+
     pathnameMock.mockReturnValue('/users');
     rerender(<TopBar user={{ id: 1, username: 'admin', role: 'admin' }} />);
     const navLinks = within(screen.getByRole('navigation', { name: 'Основная навигация' }))
