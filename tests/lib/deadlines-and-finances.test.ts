@@ -9,8 +9,11 @@ import {
 import {
   computeCarFinances,
   computeFleetFinancialSummary,
+  computeManagerFee,
   computeRentDebt30d,
+  getMonthStartIso,
   getWindowStartIso,
+  sumPaidAndManagerInRange,
 } from '@/lib/finances';
 import {
   createCarSchema,
@@ -212,6 +215,7 @@ describe('30-day finances engine', () => {
       unpaidFinesSum: 1500,
       unpaidFinesCount: 1,
       paidRental30d: 2000,
+      managerIncome30d: 0,
       maintenanceCost30d: 8000,
       netIncome30d: -6000,
     });
@@ -263,9 +267,144 @@ describe('30-day finances engine', () => {
       totalUnpaidFinesSum: 4500,
       totalUnpaidFinesCount: 2,
       paidRental30d: 5000,
+      managerIncome30d: 0,
+      paidRentalMonth: 5000,
+      managerIncomeMonth: 0,
       maintenanceCost30d: 12000,
       netIncome30d: -7000,
       urgentDeadlineCarsCount: 1,
+    });
+  });
+
+  it('computes calendar month start ISO and manager fee with rounding', () => {
+    expect(getMonthStartIso('2026-11-24')).toBe('2026-11-01');
+    expect(getMonthStartIso('2026-01-01')).toBe('2026-01-01');
+
+    expect(computeManagerFee(33330, 15)).toBe(5000);
+    expect(computeManagerFee(1000, 12.5)).toBe(125);
+    expect(computeManagerFee(1000, 0)).toBe(0);
+  });
+
+  it('aggregates paid amounts per rental before rounding manager commission and separates mixed rentals', () => {
+    // 30 daily paid payments of 1111 at 15%: sum first -> 33330 -> Math.round(33330 * 0.15) = 5000 (not 30 * 167 = 5010)
+    const dailyPayments = Array.from({ length: 30 }, (_, idx) => {
+      const day = String(idx + 1).padStart(2, '0');
+      return {
+        rentalId: 1,
+        dueDate: `2026-11-${day}`,
+        amount: 1111,
+        paidAt: `2026-11-${day}T10:00:00Z`,
+      };
+    });
+
+    expect(
+      sumPaidAndManagerInRange(
+        [{ id: 1, managerCommissionPercent: 15 }],
+        dailyPayments,
+        '2026-11-01',
+        '2026-11-30',
+      ),
+    ).toEqual({
+      paidRental: 33330,
+      managerIncome: 5000,
+    });
+
+    // Mixed rentals on the same car/fleet (10% closed + 15% active) + unpaid ignored + out-of-range ignored
+    const mixedRentals = [
+      { id: 10, managerCommissionPercent: 10 },
+      { id: 11, managerCommissionPercent: 15 },
+    ];
+    const mixedPayments = [
+      { rentalId: 10, dueDate: '2026-11-02', amount: 1005, paidAt: '2026-11-02T10:00:00Z' },
+      { rentalId: 10, dueDate: '2026-11-03', amount: 1005, paidAt: '2026-11-03T10:00:00Z' },
+      { rentalId: 11, dueDate: '2026-11-10', amount: 1000, paidAt: '2026-11-10T10:00:00Z' },
+      { rentalId: 11, dueDate: '2026-11-11', amount: 1000, paidAt: null },
+      { rentalId: 11, dueDate: '2026-10-31', amount: 5000, paidAt: '2026-10-31T10:00:00Z' },
+    ];
+
+    expect(
+      sumPaidAndManagerInRange(mixedRentals, mixedPayments, '2026-11-01', '2026-11-30'),
+    ).toEqual({
+      paidRental: 3010,
+      managerIncome: 351, // Math.round(2010 * 0.1) = 201 + Math.round(1000 * 0.15) = 150
+    });
+  });
+
+  it('separates calendar month and 30-day window and subtracts manager income from owner netIncome30d', () => {
+    const todayIso = '2026-11-10';
+    // 30d window is [2026-10-12..2026-11-10]; calendar month is [2026-11-01..2026-11-10]
+    const rentals = [
+      {
+        id: 10,
+        carId: 1,
+        rateAmount: 2000,
+        periodicity: 'monthly' as const,
+        startDate: '2026-10-31',
+        endDate: '2026-11-02',
+        active: false,
+        managerCommissionPercent: 10,
+      },
+      {
+        id: 11,
+        carId: 1,
+        rateAmount: 3000,
+        periodicity: 'monthly' as const,
+        startDate: '2026-11-01',
+        endDate: null,
+        active: true,
+        managerCommissionPercent: 15,
+      },
+      {
+        id: 12,
+        carId: 2,
+        rateAmount: 4000,
+        periodicity: 'monthly' as const,
+        startDate: '2026-10-25',
+        endDate: null,
+        active: true,
+        // managerCommissionPercent omitted -> backward compatible 0%
+      },
+    ];
+    const payments = [
+      // In 30d window, OUT of calendar month (2026-10-31)
+      { rentalId: 10, dueDate: '2026-10-31', amount: 2000, paidAt: '2026-10-31T09:00:00Z' },
+      // In BOTH 30d window and calendar month (2026-11-01)
+      { rentalId: 11, dueDate: '2026-11-01', amount: 3000, paidAt: '2026-11-01T09:00:00Z' },
+      // In 30d window, OUT of calendar month (2026-10-25), omitted commission (0%)
+      { rentalId: 12, dueDate: '2026-10-25', amount: 4000, paidAt: '2026-10-25T09:00:00Z' },
+    ];
+    const maintenance = [{ carId: 1, performedAt: '2026-11-05', totalCost: 1000 }];
+
+    const car1Finances = computeCarFinances(1, rentals, payments, [], maintenance, todayIso);
+    expect(car1Finances).toEqual({
+      rentDebt30d: 0,
+      unpaidFinesSum: 0,
+      unpaidFinesCount: 0,
+      paidRental30d: 5000,
+      managerIncome30d: 650, // 2000*10% + 3000*15%
+      maintenanceCost30d: 1000,
+      netIncome30d: 3350, // 5000 - 650 - 1000
+    });
+
+    const car2Finances = computeCarFinances(2, rentals, payments, [], maintenance, todayIso);
+    expect(car2Finances.managerIncome30d).toBe(0);
+    expect(car2Finances.netIncome30d).toBe(4000);
+
+    const fleet = computeFleetFinancialSummary([], rentals, payments, maintenance, todayIso, {
+      fines: [],
+      urgentDeadlineCarsCount: 0,
+    });
+    expect(fleet).toEqual({
+      totalRentDebt30d: 0,
+      totalUnpaidFinesSum: 0,
+      totalUnpaidFinesCount: 0,
+      paidRental30d: 9000,
+      managerIncome30d: 650,
+      paidRentalMonth: 3000,
+      managerIncomeMonth: 450,
+      maintenanceCost30d: 1000,
+      netIncome30d: 7350, // 9000 - 650 - 1000
+      urgentDeadlineCarsCount: 0,
     });
   });
 });

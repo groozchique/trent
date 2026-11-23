@@ -943,17 +943,24 @@ describe('Car v2 API routes (lifecycle, fines status, documents, maintenance edi
         totalUnpaidFinesSum: number;
         totalUnpaidFinesCount: number;
         paidRental30d: number;
+        managerIncome30d: number;
+        paidRentalMonth: number;
+        managerIncomeMonth: number;
         maintenanceCost30d: number;
         netIncome30d: number;
         urgentDeadlineCarsCount: number;
       };
     };
 
+    const expectedPaidRentalMonth = dayMinus2 >= `${todayIso.slice(0, 7)}-01` ? 2000 : 0;
     expect(listBody.summary).toEqual({
       totalRentDebt30d: 2000,
       totalUnpaidFinesSum: 1500,
       totalUnpaidFinesCount: 1,
       paidRental30d: 2000,
+      managerIncome30d: 0,
+      paidRentalMonth: expectedPaidRentalMonth,
+      managerIncomeMonth: 0,
       maintenanceCost30d: 5000,
       netIncome30d: -3000,
       urgentDeadlineCarsCount: 1,

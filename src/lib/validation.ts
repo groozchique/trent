@@ -48,6 +48,9 @@ export type FleetDashboardSummary = {
   totalUnpaidFinesSum: number;
   totalUnpaidFinesCount: number;
   paidRental30d: number;
+  managerIncome30d: number;
+  paidRentalMonth: number;
+  managerIncomeMonth: number;
   maintenanceCost30d: number;
   netIncome30d: number;
   urgentDeadlineCarsCount: number;
