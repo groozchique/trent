@@ -31,6 +31,11 @@ export function TopBar({ user }: { user: SessionUser | null }) {
           label: 'Водители',
           isActive: pathname === '/drivers' || pathname.startsWith('/drivers/'),
         },
+        {
+          href: '/reports',
+          label: 'Отчёты',
+          isActive: pathname === '/reports' || pathname.startsWith('/reports/'),
+        },
         ...(user.role === 'admin'
           ? [
               {

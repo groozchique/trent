@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { BrandIcon } from '@/components/BrandIcon';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -221,17 +221,36 @@ describe('TopBar', () => {
 
     const fleetLink = screen.getByRole('link', { name: 'Автопарк' });
     const driversLink = screen.getByRole('link', { name: 'Водители' });
+    const reportsLink = screen.getByRole('link', { name: 'Отчёты' });
     expect(fleetLink).toHaveAttribute('href', '/');
     expect(driversLink).toHaveAttribute('href', '/drivers');
+    expect(reportsLink).toHaveAttribute('href', '/reports');
     expect(fleetLink).not.toHaveAttribute('aria-current', 'page');
     expect(driversLink).toHaveAttribute('aria-current', 'page');
+    expect(reportsLink).not.toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('link', { name: 'Пользователи' })).not.toBeInTheDocument();
+
+    pathnameMock.mockReturnValue('/reports');
+    rerender(<TopBar user={{ id: 2, username: 'viewer', role: 'viewer' }} />);
+    expect(screen.getByRole('link', { name: 'Отчёты' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Водители' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
 
     pathnameMock.mockReturnValue('/users');
     rerender(<TopBar user={{ id: 1, username: 'admin', role: 'admin' }} />);
+    const navLinks = within(screen.getByRole('navigation', { name: 'Основная навигация' }))
+      .getAllByRole('link')
+      .map((link) => link.textContent);
+    expect(navLinks).toEqual(['Автопарк', 'Водители', 'Отчёты', 'Пользователи']);
     const usersLink = screen.getByRole('link', { name: 'Пользователи' });
     expect(usersLink).toHaveAttribute('href', '/users');
     expect(usersLink).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Отчёты' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     expect(screen.getByRole('link', { name: 'Водители' })).not.toHaveAttribute(
       'aria-current',
       'page',
