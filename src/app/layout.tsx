@@ -6,7 +6,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'tRent | Управление автопарком',
-  description: 'Учёт машин такси, аренды, штрафов и ремонта',
+  description: 'Учёт машин такси, аренды, отчётов и ремонта',
 };
 
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('taxi_theme');var d=t==='light'||t==='dark'?t:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.dataset.theme=d;document.documentElement.style.colorScheme=d;}catch(e){}})();`;

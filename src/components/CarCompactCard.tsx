@@ -2,6 +2,7 @@
 
 import { User } from 'lucide-react';
 import type { CarSummaryDto } from '@/lib/validation';
+import { SHOW_FINES } from '@/lib/features';
 import { formatMileage } from '@/lib/format';
 import { BrandIcon } from './BrandIcon';
 import { StatusBadge } from './StatusBadge';
@@ -51,23 +52,25 @@ export function CarCompactCard({
             {formatMileage(car.mileage)}
           </span>
         </span>
-        <span className="flex items-center justify-between gap-2">
-          <span className="text-[var(--text-secondary)]">Неоплаченные штрафы</span>
-          {car.unpaidFinesCount > 0 ? (
-            <span
-              style={{
-                backgroundColor: 'var(--status-repair-bg)',
-                borderColor: 'var(--status-repair-border)',
-                color: 'var(--status-repair-text)',
-              }}
-              className="inline-flex min-w-5 items-center justify-center rounded-full border px-1.5 py-0.5 text-xs font-semibold leading-none tabular-nums"
-            >
-              {car.unpaidFinesCount}
-            </span>
-          ) : (
-            <span className="font-medium text-[var(--text-secondary)] tabular-nums">0</span>
-          )}
-        </span>
+        {SHOW_FINES && (
+          <span className="flex items-center justify-between gap-2">
+            <span className="text-[var(--text-secondary)]">Неоплаченные штрафы</span>
+            {car.unpaidFinesCount > 0 ? (
+              <span
+                style={{
+                  backgroundColor: 'var(--status-repair-bg)',
+                  borderColor: 'var(--status-repair-border)',
+                  color: 'var(--status-repair-text)',
+                }}
+                className="inline-flex min-w-5 items-center justify-center rounded-full border px-1.5 py-0.5 text-xs font-semibold leading-none tabular-nums"
+              >
+                {car.unpaidFinesCount}
+              </span>
+            ) : (
+              <span className="font-medium text-[var(--text-secondary)] tabular-nums">0</span>
+            )}
+          </span>
+        )}
         {car.deadlineStatus !== 'ok' && (
           <span className="flex items-center justify-between gap-2 pt-0.5">
             <span className="text-[var(--text-secondary)]">Сроки</span>

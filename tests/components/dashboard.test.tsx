@@ -77,7 +77,7 @@ describe('CarCompactCard', () => {
     cleanup();
   });
 
-  it('renders plate, brand icon, model, Russian status, formatted mileage, and unpaid fines count', () => {
+  it('renders plate, brand icon, model, Russian status, formatted mileage, and hides unpaid fines when SHOW_FINES is false', () => {
     const onSelect = vi.fn();
     render(<CarCompactCard car={SAMPLE_CARS[0]} onSelect={onSelect} />);
 
@@ -90,7 +90,8 @@ describe('CarCompactCard', () => {
     expect(within(cardButton).getByText('Kia Rio')).toBeInTheDocument();
     expect(within(cardButton).getByText('В аренде')).toBeInTheDocument();
     expect(within(cardButton).getByText('142 500 км')).toBeInTheDocument();
-    expect(within(cardButton).getByText('2')).toBeInTheDocument();
+    expect(within(cardButton).queryByText('Неоплаченные штрафы')).not.toBeInTheDocument();
+    expect(within(cardButton).queryByText('2')).not.toBeInTheDocument();
 
     fireEvent.click(cardButton);
     expect(onSelect).toHaveBeenCalledWith(1);

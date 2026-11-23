@@ -248,7 +248,7 @@ describe('CarDetailModal and nested modals', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders only 3 fines inline out of 5 with «Посмотреть все (5)» and opens FinesListModal with all 5', async () => {
+  it('hides «Штрафы» section in CarDetailModal when SHOW_FINES is false', async () => {
     stubCarDetailFetch();
 
     render(
@@ -260,44 +260,19 @@ describe('CarDetailModal and nested modals', () => {
     expect(within(dialog).getByText('Kia Rio')).toBeInTheDocument();
     expect(within(dialog).getByText('142 500 км')).toBeInTheDocument();
 
-    // First 3 fines are visible inline
-    expect(within(dialog).getByText('Превышение скорости на 20–40 км/ч')).toBeInTheDocument();
-    expect(within(dialog).getByText('Движение по выделенной полосе')).toBeInTheDocument();
-    expect(within(dialog).getByText('Несоблюдение требований дорожных знаков')).toBeInTheDocument();
-    // 4th and 5th are not rendered inline
+    expect(within(dialog).queryByRole('region', { name: 'Штрафы' })).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByText('Нарушение правил применения ремней'),
+      within(dialog).queryByText('Превышение скорости на 20–40 км/ч'),
     ).not.toBeInTheDocument();
     expect(
-      within(dialog).queryByText('Нарушение правил остановки и стоянки'),
+      within(dialog).queryByRole('button', { name: /Посмотреть все/i }),
     ).not.toBeInTheDocument();
-
-    const viewAllBtn = within(dialog).getByRole('button', { name: 'Посмотреть все (5)' });
-    fireEvent.click(viewAllBtn);
-
-    const dialogs = screen.getAllByRole('dialog');
-    expect(dialogs).toHaveLength(2);
-    const listDialog = dialogs[1];
-    expect(within(listDialog).getByText('Нарушение правил применения ремней')).toBeInTheDocument();
-    expect(within(listDialog).getByText('Нарушение правил остановки и стоянки')).toBeInTheDocument();
-
-    // Pressing Escape closes only the top nested modal, keeping CarDetailModal open
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 
-  it('opens FineDetailModal for expired discount showing exact resolution, violatedAt, full amount, paymentDeadline, and «Скидка истекла» with no negative days', async () => {
-    stubCarDetailFetch();
+  it('renders FineDetailModal for expired discount showing exact resolution, violatedAt, full amount, paymentDeadline, and «Скидка истекла» with no negative days', () => {
+    render(<FineDetailModal fine={SAMPLE_FINES[2]} onClose={vi.fn()} />);
 
-    render(
-      <CarDetailModal carId={1} userRole="viewer" onClose={vi.fn()} onUpdated={vi.fn()} />,
-    );
-
-    await screen.findByText('Несоблюдение требований дорожных знаков');
-    fireEvent.click(screen.getByText('Несоблюдение требований дорожных знаков'));
-
-    const dialogs = screen.getAllByRole('dialog');
-    const fineDialog = dialogs[dialogs.length - 1];
+    const fineDialog = screen.getByRole('dialog');
 
     expect(within(fineDialog).getByText('18810177261100001003')).toBeInTheDocument();
     expect(within(fineDialog).getByText('24.10.2026, 19:10')).toBeInTheDocument();
@@ -591,9 +566,9 @@ describe('CarDetailModal and nested modals', () => {
     );
 
     const carDialog = await screen.findByRole('dialog');
-    fireEvent.click(within(carDialog).getByRole('button', { name: 'Посмотреть все (5)' }));
-    const finesDialog = screen.getAllByRole('dialog')[1];
-    fireEvent.click(within(finesDialog).getByText('Нарушение правил остановки и стоянки'));
+    fireEvent.click(within(carDialog).getByRole('button', { name: /История ремонта/i }));
+    const serviceHistoryDialog = screen.getAllByRole('dialog')[1];
+    fireEvent.click(within(serviceHistoryDialog).getByText('ТО-140: замена масла и фильтров'));
 
     expect(screen.getAllByRole('dialog')).toHaveLength(3);
     fireEvent.keyDown(window, { key: 'Escape' });
@@ -602,7 +577,7 @@ describe('CarDetailModal and nested modals', () => {
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 
-  it('renders СТС, Документы и ТО badges, fine driverName, rental phone/debt, and collapsible История аренд in CarDetailModal', async () => {
+  it('renders СТС, Документы и ТО badges, rental phone/debt, and collapsible История аренд in CarDetailModal while hiding Штрафы', async () => {
     const detailedCar: CarDetailDto = {
       ...SAMPLE_CAR_DETAIL,
       stsNumber: '99 01 112233',
@@ -687,10 +662,8 @@ describe('CarDetailModal and nested modals', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('СТС: 99 01 112233')).toBeInTheDocument();
 
-    // Fine driverName displayed on fine rows
-    expect(
-      within(dialog).getAllByText(/Водитель: Иванов Алексей Сергеевич/),
-    ).toHaveLength(2);
+    // Fines section is hidden when SHOW_FINES is false
+    expect(within(dialog).queryByRole('region', { name: 'Штрафы' })).not.toBeInTheDocument();
 
     // Documents and scheduled maintenance section
     const docsSection = within(dialog).getByRole('region', { name: 'Документы и ТО' });
@@ -781,117 +754,6 @@ describe('CarDetailModal and nested modals', () => {
     expect(onUpdated).toHaveBeenCalledWith(updatedPaidFine);
     expect(await screen.findByRole('button', { name: 'Вернуть в неоплаченные' })).toBeInTheDocument();
     expect(screen.getByText('Оплачен')).toBeInTheDocument();
-  });
-
-  it('wires FineDetailModal toggle through CarDetailModal and refreshes DashboardClient KPI summary', async () => {
-    const initialCarSummary = {
-      id: 1,
-      plate: 'А123ВС 777',
-      brand: 'Kia',
-      model: 'Rio',
-      status: 'in_rent' as const,
-      mileage: 142500,
-      stsNumber: '99 01 112233',
-      nextServiceMileage: null,
-      nextServiceDate: null,
-      unpaidFinesCount: 4,
-      unpaidFinesSum: 10250,
-      rentDebt30d: 4800,
-      activeDriverId: 1,
-      activeDriverName: 'Иванов Алексей Сергеевич',
-      deadlineStatus: 'ok' as const,
-      urgentDeadlinesCount: 0,
-    };
-
-    let currentCarDetail = {
-      ...SAMPLE_CAR_DETAIL,
-      fines: SAMPLE_FINES.map((f) => ({ ...f })),
-    };
-
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      if (url === '/api/cars/1' && (!init?.method || init.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ car: currentCarDetail }),
-        });
-      }
-      if (url === '/api/cars/1/fines/1' && init?.method === 'PATCH') {
-        const updatedFine: FineDto = { ...SAMPLE_FINES[0], status: 'paid' };
-        currentCarDetail = {
-          ...currentCarDetail,
-          unpaidFinesCount: 3,
-          unpaidFinesSum: 9500,
-          fines: currentCarDetail.fines.map((f) => (f.id === 1 ? updatedFine : f)),
-        };
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ fine: updatedFine }),
-        });
-      }
-      if (url === '/api/cars') {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            cars: [{ ...initialCarSummary, unpaidFinesCount: 3, unpaidFinesSum: 9500 }],
-            summary: {
-              totalRentDebt30d: 4800,
-              totalUnpaidFinesSum: 9500,
-              totalUnpaidFinesCount: 3,
-              paidRental30d: 12000,
-              managerIncome30d: 0,
-              paidRentalMonth: 0,
-              managerIncomeMonth: 0,
-              maintenanceCost30d: 2000,
-              netIncome30d: 10000,
-              urgentDeadlineCarsCount: 0,
-            },
-          }),
-        });
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(
-      <DashboardClient
-        initialCars={[initialCarSummary]}
-        initialSummary={{
-          totalRentDebt30d: 4800,
-          totalUnpaidFinesSum: 10250,
-          totalUnpaidFinesCount: 4,
-          paidRental30d: 12000,
-          managerIncome30d: 0,
-          paidRentalMonth: 0,
-          managerIncomeMonth: 0,
-          maintenanceCost30d: 2000,
-          netIncome30d: 10000,
-          urgentDeadlineCarsCount: 0,
-        }}
-        userRole="admin"
-      />,
-    );
-
-    const kpiRegion = screen.getByRole('region', { name: 'Финансовая сводка и сроки' });
-    expect(within(kpiRegion).getByText('10 250 ₽')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /А123ВС 777/ }));
-    const carDialog = await screen.findByRole('dialog');
-    await within(carDialog).findByText('Превышение скорости на 20–40 км/ч');
-
-    fireEvent.click(within(carDialog).getByText('Превышение скорости на 20–40 км/ч'));
-    const dialogs = screen.getAllByRole('dialog');
-    const fineDialog = dialogs[dialogs.length - 1];
-
-    fireEvent.click(within(fineDialog).getByRole('button', { name: 'Отметить оплаченным' }));
-
-    await waitFor(() => {
-      expect(within(fineDialog).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeInTheDocument();
-      expect(within(kpiRegion).getByText('9 500 ₽')).toBeInTheDocument();
-    });
-    expect(within(carDialog).getByText(/Неоплаченных: 3/)).toBeInTheDocument();
   });
 
   it('omits fabricated «по startDate» in CarDetailModal rental history when endDate is null', async () => {

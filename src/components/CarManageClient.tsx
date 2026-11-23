@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, RefreshCw, Trash2, UserPlus } from 'lucide-react';
 import type { CarStatus, FineStatus, RentalPeriodicity } from '@/db/schema';
+import { SHOW_FINES } from '@/lib/features';
 import {
   formatDateRu,
   formatDateTimeRu,
@@ -48,6 +49,10 @@ const MANAGE_TABS: Array<{ id: ManageTabId; label: string }> = [
   { id: 'rental', label: 'Аренда' },
   { id: 'fines', label: 'Штрафы' },
 ];
+
+const VISIBLE_MANAGE_TABS = SHOW_FINES
+  ? MANAGE_TABS
+  : MANAGE_TABS.filter((tab) => tab.id !== 'fines');
 
 const CAR_STATUS_OPTIONS: Array<{ value: CarStatus; label: string }> = [
   { value: 'in_rent', label: 'В аренде' },
@@ -1954,15 +1959,15 @@ export function CarManageClient({
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) {
     let nextIndex: number | null = null;
-    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % MANAGE_TABS.length;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % VISIBLE_MANAGE_TABS.length;
     else if (event.key === 'ArrowLeft')
-      nextIndex = (currentIndex - 1 + MANAGE_TABS.length) % MANAGE_TABS.length;
+      nextIndex = (currentIndex - 1 + VISIBLE_MANAGE_TABS.length) % VISIBLE_MANAGE_TABS.length;
     else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = MANAGE_TABS.length - 1;
+    else if (event.key === 'End') nextIndex = VISIBLE_MANAGE_TABS.length - 1;
 
     if (nextIndex === null) return;
     event.preventDefault();
-    const targetTab = MANAGE_TABS[nextIndex];
+    const targetTab = VISIBLE_MANAGE_TABS[nextIndex];
     setActiveTab(targetTab.id);
     tabRefs.current[targetTab.id]?.focus();
   }
@@ -2013,7 +2018,7 @@ export function CarManageClient({
         aria-label="Разделы управления автомобилем"
         className="mt-4 flex gap-1.5 overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-1.5"
       >
-        {MANAGE_TABS.map((tab, index) => {
+        {VISIBLE_MANAGE_TABS.map((tab, index) => {
           const isSelected = activeTab === tab.id;
           return (
             <button
@@ -2064,7 +2069,7 @@ export function CarManageClient({
             onCarUpdated={refreshCar}
           />
         )}
-        {activeTab === 'fines' && (
+        {SHOW_FINES && activeTab === 'fines' && (
           <FinesTab car={carState} drivers={driverList} onCarUpdated={refreshCar} />
         )}
       </section>

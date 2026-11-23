@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, SlidersHorizontal, Wrench } from 'lucide-rea
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
 import { CAR_DOCUMENT_LABELS, type DeadlineState } from '@/lib/deadlines';
 import type { CarDetailDto, FineDto, MaintenanceDto } from '@/lib/validation';
+import { SHOW_FINES } from '@/lib/features';
 import { formatDateRu, formatMileage, formatRentalPeriod, formatRub } from '@/lib/format';
 import { BrandIcon } from './BrandIcon';
 import { FineDetailModal } from './FineDetailModal';
@@ -249,50 +250,52 @@ export function CarDetailModal({
           </div>
         ) : visibleCar ? (
           <div className="space-y-5">
-            <section aria-label="Штрафы" className="space-y-2.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Штрафы</h3>
-                {visibleCar.unpaidFinesCount > 0 && (
-                  <span
-                    style={{ color: 'var(--status-repair-text)' }}
-                    className="text-xs font-medium tabular-nums"
-                  >
-                    Неоплаченных: {visibleCar.unpaidFinesCount} (
-                    {formatRub(visibleCar.unpaidFinesSum)})
-                  </span>
-                )}
-              </div>
-
-              {visibleCar.fines.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-[var(--border-strong)] px-3.5 py-4 text-center text-xs text-[var(--text-secondary)]">
-                  Штрафов нет
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  <ul className="space-y-2">
-                    {visibleCar.fines.slice(0, 3).map((fine) => (
-                      <li key={fine.id}>
-                        <FineListRow
-                          fine={fine}
-                          todayIso={todayIso}
-                          onSelect={(item) => setSelectedFine(item)}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-
-                  {visibleCar.fines.length > 3 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllFines(true)}
-                      className="inline-flex h-9 w-full cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+            {SHOW_FINES && (
+              <section aria-label="Штрафы" className="space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Штрафы</h3>
+                  {visibleCar.unpaidFinesCount > 0 && (
+                    <span
+                      style={{ color: 'var(--status-repair-text)' }}
+                      className="text-xs font-medium tabular-nums"
                     >
-                      Посмотреть все ({visibleCar.fines.length})
-                    </button>
+                      Неоплаченных: {visibleCar.unpaidFinesCount} (
+                      {formatRub(visibleCar.unpaidFinesSum)})
+                    </span>
                   )}
                 </div>
-              )}
-            </section>
+
+                {visibleCar.fines.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-[var(--border-strong)] px-3.5 py-4 text-center text-xs text-[var(--text-secondary)]">
+                    Штрафов нет
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <ul className="space-y-2">
+                      {visibleCar.fines.slice(0, 3).map((fine) => (
+                        <li key={fine.id}>
+                          <FineListRow
+                            fine={fine}
+                            todayIso={todayIso}
+                            onSelect={(item) => setSelectedFine(item)}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+
+                    {visibleCar.fines.length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllFines(true)}
+                        className="inline-flex h-9 w-full cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                      >
+                        Посмотреть все ({visibleCar.fines.length})
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             <section aria-label="Документы и ТО" className="space-y-2.5">
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">Документы и ТО</h3>
@@ -543,7 +546,7 @@ export function CarDetailModal({
         ) : null}
       </ModalShell>
 
-      {visibleCar && showAllFines && (
+      {SHOW_FINES && visibleCar && showAllFines && (
         <FinesListModal
           fines={visibleCar.fines}
           onSelectFine={(fine) => setSelectedFine(fine)}
@@ -551,7 +554,7 @@ export function CarDetailModal({
         />
       )}
 
-      {selectedFine && (
+      {SHOW_FINES && selectedFine && (
         <FineDetailModal
           carId={visibleCar?.id}
           fine={selectedFine}

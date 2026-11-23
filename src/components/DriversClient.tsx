@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Car, Phone, Plus, Search, X } from 'lucide-react';
 import type { UserRole } from '@/db/schema';
+import { SHOW_FINES } from '@/lib/features';
 import { formatRub } from '@/lib/format';
 import {
   createDriverSchema,
@@ -243,13 +244,11 @@ export function DriversClient({
 
   const filteredDrivers = drivers.filter((driver) => {
     if (filterTab === 'active' && driver.archived) return false;
-    if (
-      filterTab === 'debtors' &&
-      driver.rentDebt30d <= 0 &&
-      driver.unpaidFinesSum <= 0 &&
-      driver.unpaidFinesCount <= 0
-    ) {
-      return false;
+    if (filterTab === 'debtors') {
+      const hasDebt =
+        driver.rentDebt30d > 0 ||
+        (SHOW_FINES && (driver.unpaidFinesSum > 0 || driver.unpaidFinesCount > 0));
+      if (!hasDebt) return false;
     }
     if (filterTab === 'archive' && !driver.archived) return false;
     return matchesSearch(driver, normalizedQuery);
@@ -450,23 +449,25 @@ export function DriversClient({
                     {formatRub(driver.rentDebt30d)}
                   </span>
                 </span>
-                <span className="flex items-center justify-between gap-2">
-                  <span className="text-[var(--text-secondary)]">Штрафы</span>
-                  <span
-                    style={
-                      driver.unpaidFinesCount > 0
-                        ? { color: 'var(--status-repair-text)' }
-                        : undefined
-                    }
-                    className={`font-medium tabular-nums ${
-                      driver.unpaidFinesCount > 0 ? 'font-semibold' : 'text-[var(--text-secondary)]'
-                    }`}
-                  >
-                    {driver.unpaidFinesCount > 0
-                      ? `${formatRub(driver.unpaidFinesSum)} (${driver.unpaidFinesCount} шт.)`
-                      : formatRub(0)}
+                {SHOW_FINES && (
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[var(--text-secondary)]">Штрафы</span>
+                    <span
+                      style={
+                        driver.unpaidFinesCount > 0
+                          ? { color: 'var(--status-repair-text)' }
+                          : undefined
+                      }
+                      className={`font-medium tabular-nums ${
+                        driver.unpaidFinesCount > 0 ? 'font-semibold' : 'text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      {driver.unpaidFinesCount > 0
+                        ? `${formatRub(driver.unpaidFinesSum)} (${driver.unpaidFinesCount} шт.)`
+                        : formatRub(0)}
+                    </span>
                   </span>
-                </span>
+                )}
               </span>
             </button>
           ))}

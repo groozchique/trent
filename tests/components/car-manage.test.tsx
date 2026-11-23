@@ -254,23 +254,22 @@ describe('CarManageClient', () => {
     vi.restoreAllMocks();
   });
 
-  it('switches across all 5 accessible tabs and renders corresponding forms', () => {
+  it('switches across all 4 visible accessible tabs and skips hidden «Штрафы» tab in keyboard navigation', () => {
     render(<CarManageClient car={SAMPLE_CAR} drivers={SAMPLE_DRIVERS} />);
 
     const tablist = screen.getByRole('tablist');
     const tabs = within(tablist).getAllByRole('tab');
-    expect(tabs).toHaveLength(5);
+    expect(tabs).toHaveLength(4);
     expect(tabs[0]).toHaveTextContent('Общая информация');
     expect(tabs[1]).toHaveTextContent('Документы и ТО');
     expect(tabs[2]).toHaveTextContent('ТО и ремонт');
     expect(tabs[3]).toHaveTextContent('Аренда');
-    expect(tabs[4]).toHaveTextContent('Штрафы');
+    expect(within(tablist).queryByRole('tab', { name: 'Штрафы' })).not.toBeInTheDocument();
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     expect(tabs[0]).toHaveAttribute('aria-controls', 'manage-panel-info');
     expect(tabs[1]).not.toHaveAttribute('aria-controls');
     expect(tabs[2]).not.toHaveAttribute('aria-controls');
     expect(tabs[3]).not.toHaveAttribute('aria-controls');
-    expect(tabs[4]).not.toHaveAttribute('aria-controls');
     expect(screen.getByLabelText('Гос. номер')).toHaveValue('А123ВС 777');
     expect(screen.getByLabelText('Номер СТС')).toHaveValue('');
 
@@ -294,27 +293,25 @@ describe('CarManageClient', () => {
     expect(screen.getByLabelText('Название работ')).toBeInTheDocument();
 
     fireEvent.click(within(tablist).getByRole('tab', { name: 'Аренда' }));
-    expect(within(tablist).getByRole('tab', { name: 'Аренда' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    const rentalTab = within(tablist).getByRole('tab', { name: 'Аренда' });
+    expect(rentalTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Водитель')).toHaveValue('1');
     expect(screen.queryByLabelText('Аренда активна')).not.toBeInTheDocument();
 
-    fireEvent.click(within(tablist).getByRole('tab', { name: 'Штрафы' }));
-    expect(within(tablist).getByRole('tab', { name: 'Штрафы' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByRole('button', { name: 'Синхронизировать с API' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Номер постановления')).toBeInTheDocument();
+    // ArrowRight on the last visible tab («Аренда») wraps to «Общая информация»
+    fireEvent.keyDown(rentalTab, { key: 'ArrowRight' });
+    const infoTab = within(tablist).getByRole('tab', { name: 'Общая информация' });
+    expect(infoTab).toHaveAttribute('aria-selected', 'true');
 
-    const finesTab = within(tablist).getByRole('tab', { name: 'Штрафы' });
-    fireEvent.keyDown(finesTab, { key: 'ArrowRight' });
-    expect(within(tablist).getByRole('tab', { name: 'Общая информация' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    // ArrowLeft wraps back to «Аренда», Home jumps to first, End jumps to last
+    fireEvent.keyDown(infoTab, { key: 'ArrowLeft' });
+    expect(rentalTab).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.keyDown(rentalTab, { key: 'Home' });
+    expect(infoTab).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.keyDown(infoTab, { key: 'End' });
+    expect(rentalTab).toHaveAttribute('aria-selected', 'true');
   });
 
   it('edits and clears stsNumber in «Общая информация» via PATCH /api/cars/[id]', async () => {
@@ -1302,269 +1299,6 @@ describe('CarManageClient', () => {
     expect(within(historySection).getByText('с 01.11.2026 по 21.11.2026')).toBeInTheDocument();
   });
 
-  it('syncs fines via POST /api/cars/[id]/fines/sync and creates manual fine via POST /api/cars/[id]/fines', async () => {
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      if (url === '/api/cars/7/fines/sync' && init?.method === 'POST') {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ inserted: 2, updated: 1 }),
-        });
-      }
-      if (url === '/api/cars/7/fines' && init?.method === 'POST') {
-        return Promise.resolve({
-          ok: true,
-          status: 201,
-          json: async () => ({
-            fine: {
-              id: 99,
-              carId: 7,
-              driverId: 1,
-              driverName: 'Иванов Алексей Сергеевич',
-              resolutionNumber: '18810177261199990001',
-              violatedAt: '2026-11-20T10:15',
-              amount: 1500,
-              discountAmount: 750,
-              discountDeadline: '2026-12-10',
-              paymentDeadline: '2027-01-20',
-              description: 'Пересечение стоп-линии',
-              status: 'unpaid',
-            },
-          }),
-        });
-      }
-      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ car: SAMPLE_CAR }),
-        });
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<CarManageClient car={SAMPLE_CAR} drivers={SAMPLE_DRIVERS} />);
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Штрафы' }));
-
-    expect(screen.getByText(/СТС не указан/)).toBeInTheDocument();
-
-    const resolutionEl = screen.getByText('18810177261100001001');
-    expect(resolutionEl).toHaveClass('break-all');
-    expect(resolutionEl.closest('li')).toHaveClass('flex-col', 'sm:flex-row');
-
-    const fineForm = screen.getByRole('form', { name: 'Добавить штраф вручную' });
-    fireEvent.click(within(fineForm).getByRole('button', { name: 'Добавить штраф' }));
-    expect(within(fineForm).getByRole('alert')).toHaveTextContent('Укажите номер постановления');
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Синхронизировать с API' }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/fines/sync', { method: 'POST' });
-    });
-    expect(await screen.findByRole('status')).toHaveTextContent(/добавлено 2, обновлено 1/i);
-    expect(within(fineForm).queryByRole('status')).not.toBeInTheDocument();
-
-    fireEvent.change(within(fineForm).getByLabelText('Номер постановления'), {
-      target: { value: '18810177261199990001' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText('Дата и время нарушения'), {
-      target: { value: '2026-11-20T10:15' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText(/Сумма штрафа/i), {
-      target: { value: '1500' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText(/Сумма со скидкой/i), {
-      target: { value: '750' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText(/Срок действия скидки/i), {
-      target: { value: '2026-12-10' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText(/Крайний срок оплаты/i), {
-      target: { value: '2027-01-20' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText('Описание нарушения'), {
-      target: { value: 'Пересечение стоп-линии' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText('Статус штрафа'), {
-      target: { value: 'unpaid' },
-    });
-
-    fireEvent.click(within(fineForm).getByRole('button', { name: 'Добавить штраф' }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/fines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resolutionNumber: '18810177261199990001',
-          violatedAt: '2026-11-20T10:15',
-          amount: 1500,
-          discountAmount: 750,
-          discountDeadline: '2026-12-10',
-          paymentDeadline: '2027-01-20',
-          description: 'Пересечение стоп-линии',
-          status: 'unpaid',
-        }),
-      });
-    });
-
-    expect(await within(fineForm).findByRole('status')).toHaveTextContent(/Штраф добавлен/i);
-  });
-
-  it('displays STS, driver attribution, optional fine driver select, and toggles fine status via PATCH', async () => {
-    const carWithStsAndUnassignedFine: CarDetailDto = {
-      ...SAMPLE_CAR,
-      stsNumber: '99 01 123456',
-      fines: [
-        SAMPLE_CAR.fines[0],
-        {
-          id: 12,
-          carId: 7,
-          driverId: null,
-          driverName: null,
-          resolutionNumber: '18810177261100001002',
-          violatedAt: '2026-11-15T09:00:00+03:00',
-          amount: 500,
-          discountAmount: null,
-          discountDeadline: null,
-          paymentDeadline: '2027-01-14',
-          description: 'Парковка под знаком',
-          status: 'paid',
-        },
-      ],
-    };
-
-    let currentFines = [...carWithStsAndUnassignedFine.fines];
-
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      if (url === '/api/cars/7/fines/11' && init?.method === 'PATCH') {
-        const body = JSON.parse(String(init.body)) as { status: 'paid' | 'unpaid' };
-        const updated = { ...currentFines[0], status: body.status };
-        currentFines = [updated, currentFines[1]];
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ fine: updated }),
-        });
-      }
-      if (url === '/api/cars/7/fines' && init?.method === 'POST') {
-        return Promise.resolve({
-          ok: true,
-          status: 201,
-          json: async () => ({
-            fine: {
-              id: 100,
-              carId: 7,
-              driverId: 2,
-              driverName: 'Петров Дмитрий Иванович',
-              resolutionNumber: '18810177261199990002',
-              violatedAt: '2026-11-20T12:00',
-              amount: 3000,
-              discountAmount: null,
-              discountDeadline: null,
-              paymentDeadline: '2027-01-20',
-              description: 'Выезд на выделенную полосу',
-              status: 'unpaid',
-            },
-          }),
-        });
-      }
-      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            car: { ...carWithStsAndUnassignedFine, fines: currentFines },
-          }),
-        });
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<CarManageClient car={carWithStsAndUnassignedFine} drivers={SAMPLE_DRIVERS} />);
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Штрафы' }));
-
-    expect(screen.getByText(/СТС 99 01 123456/)).toBeInTheDocument();
-
-    const finesSection = screen.getByRole('region', { name: 'Список штрафов автомобиля' });
-    expect(within(finesSection).getByText(/Иванов Алексей Сергеевич/)).toBeInTheDocument();
-    expect(within(finesSection).getByText(/Не определён/)).toBeInTheDocument();
-
-    // Toggle unpaid fine 11 -> paid
-    const firstRow = within(finesSection).getByText('18810177261100001001').closest('li')!;
-    fireEvent.click(within(firstRow).getByRole('button', { name: 'Отметить оплаченным' }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/fines/11', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'paid' }),
-      });
-    });
-
-    await waitFor(() => {
-      expect(within(firstRow).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeInTheDocument();
-    });
-
-    // Toggle back to unpaid
-    fireEvent.click(within(firstRow).getByRole('button', { name: 'Вернуть в неоплаченные' }));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/fines/11', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'unpaid' }),
-      });
-    });
-
-    // Manual add fine with explicit driver selected
-    const fineForm = screen.getByRole('form', { name: 'Добавить штраф вручную' });
-    const fineDriverSelect = within(fineForm).getByLabelText('Водитель');
-    expect(fineDriverSelect).toHaveValue('');
-    expect(within(fineDriverSelect).getByRole('option', { name: 'Автоматически по дате нарушения' })).toBeInTheDocument();
-
-    fireEvent.change(fineDriverSelect, { target: { value: '2' } });
-    fireEvent.change(within(fineForm).getByLabelText('Номер постановления'), {
-      target: { value: '18810177261199990002' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText('Дата и время нарушения'), {
-      target: { value: '2026-11-20T12:00' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText(/Сумма штрафа/i), {
-      target: { value: '3000' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText(/Крайний срок оплаты/i), {
-      target: { value: '2027-01-20' },
-    });
-    fireEvent.change(within(fineForm).getByLabelText('Описание нарушения'), {
-      target: { value: 'Выезд на выделенную полосу' },
-    });
-
-    fireEvent.click(within(fineForm).getByRole('button', { name: 'Добавить штраф' }));
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/fines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          driverId: 2,
-          resolutionNumber: '18810177261199990002',
-          violatedAt: '2026-11-20T12:00',
-          amount: 3000,
-          discountAmount: null,
-          discountDeadline: null,
-          paymentDeadline: '2027-01-20',
-          description: 'Выезд на выделенную полосу',
-          status: 'unpaid',
-        }),
-      });
-    });
-  });
-
   it('renders DELETE error inside delete confirmation section and syncs MaintenanceTab mileage when car prop updates', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -1621,12 +1355,8 @@ describe('CarManageClient', () => {
     expect(screen.getByLabelText(/Стоимость аренды/i)).toHaveValue(2900);
   });
 
-  it('validates negative service mileage, preserves archived assigned driver, rejects endDate before startDate, and surfaces fine toggle error', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      json: async () => ({ error: 'Ошибка обновления статуса штрафа' }),
-    });
+  it('validates negative service mileage, preserves archived assigned driver, and rejects endDate before startDate', () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
     const carWithArchivedDriver: CarDetailDto = {
@@ -1668,15 +1398,6 @@ describe('CarManageClient', () => {
       'Дата окончания не может быть раньше даты начала аренды',
     );
     expect(fetchMock).not.toHaveBeenCalled();
-
-    // Fine toggle error surfaced in fines list section
-    fireEvent.click(screen.getByRole('tab', { name: 'Штрафы' }));
-    const finesSection = screen.getByRole('region', { name: 'Список штрафов автомобиля' });
-    fireEvent.click(within(finesSection).getByRole('button', { name: 'Отметить оплаченным' }));
-
-    expect(await within(finesSection).findByRole('alert')).toHaveTextContent(
-      'Ошибка обновления статуса штрафа',
-    );
   });
 
   it('rejects unset document policyNumber or notes without expiresAt and still deletes saved docs on cleared date', async () => {
@@ -1778,85 +1499,4 @@ describe('CarManageClient', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Документы и сроки ТО сохранены');
   });
 
-  it('disables other fine toggle buttons, sync button, and manual form while fine toggle PATCH is pending', async () => {
-    const carWithTwoFines: CarDetailDto = {
-      ...SAMPLE_CAR,
-      fines: [
-        SAMPLE_CAR.fines[0],
-        {
-          id: 12,
-          carId: 7,
-          driverId: 2,
-          driverName: 'Петров Дмитрий Иванович',
-          resolutionNumber: '18810177261100001002',
-          violatedAt: '2026-11-15T09:00:00+03:00',
-          amount: 500,
-          discountAmount: null,
-          discountDeadline: null,
-          paymentDeadline: '2027-01-14',
-          description: 'Парковка под знаком',
-          status: 'paid',
-        },
-      ],
-    };
-
-    let resolvePatch!: (value: Response | PromiseLike<Response>) => void;
-    const patchPromise = new Promise<Response>((resolve) => {
-      resolvePatch = resolve;
-    });
-
-    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      if (url === '/api/cars/7/fines/11' && init?.method === 'PATCH') {
-        return patchPromise;
-      }
-      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            car: {
-              ...carWithTwoFines,
-              fines: [
-                { ...carWithTwoFines.fines[0], status: 'paid' as const },
-                carWithTwoFines.fines[1],
-              ],
-            },
-          }),
-        });
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<CarManageClient car={carWithTwoFines} drivers={SAMPLE_DRIVERS} />);
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Штрафы' }));
-
-    const syncButton = screen.getByRole('button', { name: 'Синхронизировать с API' });
-    const fineForm = screen.getByRole('form', { name: 'Добавить штраф вручную' });
-    const createButton = within(fineForm).getByRole('button', { name: 'Добавить штраф' });
-    const finesSection = screen.getByRole('region', { name: 'Список штрафов автомобиля' });
-    const firstRow = within(finesSection).getByText('18810177261100001001').closest('li')!;
-    const secondRow = within(finesSection).getByText('18810177261100001002').closest('li')!;
-
-    fireEvent.click(within(firstRow).getByRole('button', { name: 'Отметить оплаченным' }));
-
-    expect(within(firstRow).getByRole('button', { name: 'Сохранение...' })).toBeDisabled();
-    expect(within(secondRow).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeDisabled();
-    expect(syncButton).toBeDisabled();
-    expect(createButton).toBeDisabled();
-
-    resolvePatch({
-      ok: true,
-      status: 200,
-      json: async () => ({ fine: { ...carWithTwoFines.fines[0], status: 'paid' } }),
-    } as Response);
-
-    await waitFor(() => {
-      expect(within(firstRow).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeEnabled();
-    });
-    expect(within(secondRow).getByRole('button', { name: 'Вернуть в неоплаченные' })).toBeEnabled();
-    expect(syncButton).toBeEnabled();
-    expect(createButton).toBeEnabled();
-  });
 });

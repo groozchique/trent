@@ -258,23 +258,25 @@ describe('DriversClient', () => {
     expect(screen.getByText('Петров Олег Николаевич')).toBeInTheDocument();
     expect(screen.queryByText('Архивов Сергей Петрович')).not.toBeInTheDocument();
 
-    // Driver card details: active car, Без машины, rent debt, fines
+    // Driver card details: active car, Без машины, rent debt; fines row hidden
     const ivanovCard = screen.getByRole('button', { name: /Иванов Алексей Сергеевич/ });
     expect(within(ivanovCard).getByText('+7 916 111-22-33')).toBeInTheDocument();
     expect(within(ivanovCard).getByText(/А123ВС 777/)).toBeInTheDocument();
     expect(within(ivanovCard).getByText(/Kia Rio/)).toBeInTheDocument();
     expect(within(ivanovCard).getByText('4 800 ₽')).toBeInTheDocument();
-    expect(within(ivanovCard).getByText('2 250 ₽ (2 шт.)')).toBeInTheDocument();
+    expect(within(ivanovCard).queryByText('Штрафы')).not.toBeInTheDocument();
+    expect(within(ivanovCard).queryByText('2 250 ₽ (2 шт.)')).not.toBeInTheDocument();
 
     const petrovCard = screen.getByRole('button', { name: /Петров Олег Николаевич/ });
     expect(within(petrovCard).getByText('Без машины')).toBeInTheDocument();
-    expect(within(petrovCard).getAllByText('0 ₽')).toHaveLength(2);
+    expect(within(petrovCard).getAllByText('0 ₽')).toHaveLength(1);
+    expect(within(petrovCard).queryByText('Штрафы')).not.toBeInTheDocument();
 
-    // Filter: С долгами
+    // Filter: С долгами excludes drivers with only unpaid fines and zero rent debt
     fireEvent.click(debtorsBtn);
     expect(debtorsBtn).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Иванов Алексей Сергеевич')).toBeInTheDocument();
-    expect(screen.getByText('Смирнов Дмитрий Павлович')).toBeInTheDocument();
+    expect(screen.queryByText('Смирнов Дмитрий Павлович')).not.toBeInTheDocument();
     expect(screen.queryByText('Петров Олег Николаевич')).not.toBeInTheDocument();
     expect(screen.queryByText('Архивов Сергей Петрович')).not.toBeInTheDocument();
 
@@ -303,7 +305,7 @@ describe('DriversClient', () => {
     expect(screen.getByText('Петров Олег Николаевич')).toBeInTheDocument();
   });
 
-  it('includes archived drivers with rent debt or unpaid fines in «С долгами» with «В архиве» badge', () => {
+  it('includes archived drivers with rent debt in «С долгами» with «В архиве» badge and excludes fine-only debtors', () => {
     const driversWithArchivedDebtors: DriverSummaryDto[] = [
       ...SAMPLE_DRIVERS,
       {
@@ -338,16 +340,13 @@ describe('DriversClient', () => {
     expect(screen.queryByText('Долгов Виктор Аркадьевич')).not.toBeInTheDocument();
     expect(screen.queryByText('Штрафов Роман Игоревич')).not.toBeInTheDocument();
 
-    // «С долгами» includes archived drivers with rent debt or unpaid fines and keeps «В архиве» badge
+    // «С долгами» includes archived drivers with rent debt and excludes fine-only debtors when SHOW_FINES is false
     fireEvent.click(screen.getByRole('button', { name: 'С долгами' }));
     const rentDebtorCard = screen.getByRole('button', { name: /Долгов Виктор Аркадьевич/ });
     expect(within(rentDebtorCard).getByText('В архиве')).toBeInTheDocument();
     expect(within(rentDebtorCard).getByText('3 200 ₽')).toBeInTheDocument();
 
-    const fineDebtorCard = screen.getByRole('button', { name: /Штрафов Роман Игоревич/ });
-    expect(within(fineDebtorCard).getByText('В архиве')).toBeInTheDocument();
-    expect(within(fineDebtorCard).getByText('1 000 ₽ (1 шт.)')).toBeInTheDocument();
-
+    expect(screen.queryByText('Штрафов Роман Игоревич')).not.toBeInTheDocument();
     expect(screen.queryByText('Архивов Сергей Петрович')).not.toBeInTheDocument();
     expect(screen.queryByText('Петров Олег Николаевич')).not.toBeInTheDocument();
 
@@ -524,14 +523,15 @@ describe('DriverDetailModal', () => {
       expect(screen.getByText('28.10.2026', { exact: false })).toBeInTheDocument();
     });
 
-    // Rental history & fines visible
+    // Rental history visible; fines section and header badge hidden when SHOW_FINES is false
     expect(screen.getByText('Kia Rio')).toBeInTheDocument();
     expect(screen.getByText('Hyundai Solaris')).toBeInTheDocument();
     expect(screen.getByText('В456ОР 777')).toBeInTheDocument();
-    expect(screen.getByText('Превышение скорости на 20–40 км/ч')).toBeInTheDocument();
-    expect(screen.getByText('Нарушение правил применения ремней')).toBeInTheDocument();
-    expect(screen.getByText('Не оплачен')).toBeInTheDocument();
-    expect(screen.getByText('Оплачен')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Штрафы водителя' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Штрафы \(/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Штрафы:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Превышение скорости на 20–40 км/ч')).not.toBeInTheDocument();
+    expect(screen.queryByText('Нарушение правил применения ремней')).not.toBeInTheDocument();
 
     // Viewer cannot edit or archive
     expect(screen.queryByRole('button', { name: 'Сохранить' })).not.toBeInTheDocument();
@@ -629,7 +629,7 @@ describe('DriverDetailModal', () => {
     });
   });
 
-  it('renders active rental without comma before «по настоящее время», omits fabricated endDate when null, and wraps resolutionNumber with break-all', async () => {
+  it('renders active rental without comma before «по настоящее время» and omits fabricated endDate when null', async () => {
     const driverWithNullEndDate: DriverDetailDto = {
       ...SAMPLE_DRIVER_DETAIL,
       rentalsHistory: [
@@ -665,8 +665,6 @@ describe('DriverDetailModal', () => {
 
     expect(screen.getByText('с 15.08.2026')).toBeInTheDocument();
     expect(screen.queryByText('с 15.08.2026 по 15.08.2026')).not.toBeInTheDocument();
-
-    expect(screen.getByText('18810177261100001001')).toHaveClass('break-all');
   });
 
   it('opens RentalTimelineModal from История аренды for a driver with no active car and lets admin toggle payment', async () => {

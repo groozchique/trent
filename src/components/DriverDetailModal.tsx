@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Archive, ArchiveRestore, CalendarDays, Car, Phone, User } from 'lucide-react';
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
+import { SHOW_FINES } from '@/lib/features';
 import { formatDateRu, formatDateTimeRu, formatRentalPeriod, formatRub } from '@/lib/format';
 import {
   updateDriverSchema,
@@ -271,7 +272,7 @@ export function DriverDetailModal({
               </span>
             )}
 
-            {visibleDriver.unpaidFinesCount > 0 && (
+            {SHOW_FINES && visibleDriver.unpaidFinesCount > 0 && (
               <span
                 style={{
                   backgroundColor: 'var(--status-repair-bg)',
@@ -540,59 +541,61 @@ export function DriverDetailModal({
             )}
           </section>
 
-          <section aria-label="Штрафы водителя" className="space-y-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                Штрафы ({visibleDriver.fines.length})
-              </h3>
-              {visibleDriver.unpaidFinesCount > 0 && (
-                <span
-                  style={{ color: 'var(--status-repair-text)' }}
-                  className="text-xs font-medium tabular-nums"
-                >
-                  Неоплаченных: {visibleDriver.unpaidFinesCount} (
-                  {formatRub(visibleDriver.unpaidFinesSum)})
-                </span>
-              )}
-            </div>
-
-            {visibleDriver.fines.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-[var(--border-strong)] px-3.5 py-4 text-center text-xs text-[var(--text-secondary)]">
-                Штрафов нет
-              </p>
-            ) : (
-              <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
-                {visibleDriver.fines.map((fine) => (
-                  <li
-                    key={fine.id}
-                    className="flex flex-col gap-2 px-3.5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+          {SHOW_FINES && (
+            <section aria-label="Штрафы водителя" className="space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                  Штрафы ({visibleDriver.fines.length})
+                </h3>
+                {visibleDriver.unpaidFinesCount > 0 && (
+                  <span
+                    style={{ color: 'var(--status-repair-text)' }}
+                    className="text-xs font-medium tabular-nums"
                   >
-                    <div className="min-w-0 space-y-1">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
-                        {fine.description}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[var(--text-secondary)]">
-                        <span className="tabular-nums">{formatDateTimeRu(fine.violatedAt)}</span>
-                        <span className="inline-flex items-center rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--text-primary)] tabular-nums">
-                          {fine.carPlate}
-                        </span>
-                        <span className="font-mono text-[11px] break-all tabular-nums">
-                          {fine.resolutionNumber}
-                        </span>
-                      </div>
-                    </div>
+                    Неоплаченных: {visibleDriver.unpaidFinesCount} (
+                    {formatRub(visibleDriver.unpaidFinesSum)})
+                  </span>
+                )}
+              </div>
 
-                    <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
-                      <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
-                        {formatRub(fine.amount)}
-                      </span>
-                      <FineStatusPill status={fine.status} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+              {visibleDriver.fines.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-[var(--border-strong)] px-3.5 py-4 text-center text-xs text-[var(--text-secondary)]">
+                  Штрафов нет
+                </p>
+              ) : (
+                <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
+                  {visibleDriver.fines.map((fine) => (
+                    <li
+                      key={fine.id}
+                      className="flex flex-col gap-2 px-3.5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
+                          {fine.description}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[var(--text-secondary)]">
+                          <span className="tabular-nums">{formatDateTimeRu(fine.violatedAt)}</span>
+                          <span className="inline-flex items-center rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[var(--text-primary)] tabular-nums">
+                            {fine.carPlate}
+                          </span>
+                          <span className="font-mono text-[11px] break-all tabular-nums">
+                            {fine.resolutionNumber}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 sm:flex-col sm:items-end">
+                        <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
+                          {formatRub(fine.amount)}
+                        </span>
+                        <FineStatusPill status={fine.status} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
         </div>
       ) : null}
     </ModalShell>
