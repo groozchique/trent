@@ -32,6 +32,7 @@ import {
   type DriverDto,
   type FineDto,
   type MaintenanceDto,
+  type OwnerOptionDto,
   type RentalDto,
   type RentalHistoryItemDto,
 } from '@/lib/validation';
@@ -73,6 +74,7 @@ const PERIODICITY_RATE_LABEL: Record<RentalPeriodicity, string> = {
 };
 
 const EMPTY_DRIVERS: DriverDto[] = [];
+const EMPTY_OWNERS: OwnerOptionDto[] = [];
 
 const INPUT_CLASS =
   'h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] disabled:opacity-60';
@@ -928,14 +930,22 @@ function MaintenanceTab({
 function RentalTab({
   car,
   drivers,
+  owners,
   onDriverCreated,
   onCarUpdated,
 }: {
   car: CarDetailDto;
   drivers: DriverDto[];
+  owners: OwnerOptionDto[];
   onDriverCreated: (driver: DriverDto) => void;
   onCarUpdated: (patch?: (prev: CarDetailDto) => CarDetailDto) => Promise<void>;
 }) {
+  const [selectedOwnerId, setSelectedOwnerId] = useState(() =>
+    car.ownerId !== null ? String(car.ownerId) : '',
+  );
+  const [savingOwner, setSavingOwner] = useState(false);
+  const [ownerFeedback, setOwnerFeedback] = useState<FeedbackState>(null);
+
   const [driverId, setDriverId] = useState(() =>
     car.rental?.driverId !== null && car.rental?.driverId !== undefined
       ? String(car.rental.driverId)
@@ -974,6 +984,10 @@ function RentalTab({
   const rentalManagerCommissionPercent = car.rental?.managerCommissionPercent;
 
   useEffect(() => {
+    setSelectedOwnerId(car.ownerId !== null ? String(car.ownerId) : '');
+  }, [car.id, car.ownerId]);
+
+  useEffect(() => {
     setDriverId(rentalDriverId !== null ? String(rentalDriverId) : '');
     setRateAmount(rentalRateAmount !== undefined ? String(rentalRateAmount) : '');
     setPeriodicity(rentalPeriodicity ?? 'daily');
@@ -993,6 +1007,17 @@ function RentalTab({
     rentalStartDate,
     rentalManagerCommissionPercent,
   ]);
+
+  const ownerOptions = useMemo(() => {
+    const options = owners.map((owner) => ({ id: owner.id, label: owner.label }));
+    if (car.ownerId !== null && !options.some((option) => option.id === car.ownerId)) {
+      options.unshift({
+        id: car.ownerId,
+        label: car.ownerName ?? `Собственник #${car.ownerId}`,
+      });
+    }
+    return options;
+  }, [owners, car.ownerId, car.ownerName]);
 
   const driverOptions = useMemo(() => {
     const activeOptions: Array<{ id: number; label: string }> = drivers
@@ -1175,11 +1200,98 @@ function RentalTab({
     }
   }
 
-  const busy = submitting || ending || creatingDriver;
+  async function handleSaveOwner() {
+    setOwnerFeedback(null);
+    const nextOwnerId = parseOptionalNumber(selectedOwnerId);
+
+    setSavingOwner(true);
+    try {
+      const response = await fetch(`/api/cars/${car.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerId: nextOwnerId }),
+      });
+
+      if (!response.ok) {
+        setOwnerFeedback({
+          kind: 'error',
+          message: await readApiError(response, 'Не удалось сохранить собственника'),
+        });
+        return;
+      }
+
+      const data = (await response.json()) as { car?: CarSummaryDto };
+      const resolvedName =
+        nextOwnerId === null
+          ? null
+          : ownerOptions.find((option) => option.id === nextOwnerId)?.label ?? null;
+
+      await onCarUpdated((prev) => ({
+        ...prev,
+        ownerId: data.car ? data.car.ownerId : nextOwnerId,
+        ownerName: data.car ? data.car.ownerName : resolvedName,
+      }));
+      setOwnerFeedback({ kind: 'success', message: 'Собственник сохранён' });
+    } catch {
+      setOwnerFeedback({
+        kind: 'error',
+        message: 'Не удалось сохранить собственника. Проверьте сеть',
+      });
+    } finally {
+      setSavingOwner(false);
+    }
+  }
+
+  const busy = submitting || ending || creatingDriver || savingOwner;
   const pastRentals = car.rentalHistory.filter((item) => !item.active);
 
   return (
     <div className="space-y-6">
+      <section
+        aria-label="Собственник"
+        className="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4"
+      >
+        <h2 className="text-base font-semibold text-[var(--text-primary)]">
+          Собственник
+        </h2>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="rental-owner" className={LABEL_CLASS}>
+              Собственник автомобиля
+            </label>
+            <select
+              id="rental-owner"
+              name="ownerId"
+              value={selectedOwnerId}
+              onChange={(event) => setSelectedOwnerId(event.target.value)}
+              disabled={busy}
+              className={INPUT_CLASS}
+            >
+              <option value="">Не указан</option>
+              {ownerOptions.map((option) => (
+                <option key={option.id} value={String(option.id)}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              void handleSaveOwner();
+            }}
+            className={`${PRIMARY_BTN_CLASS} shrink-0`}
+          >
+            {savingOwner ? 'Сохранение...' : 'Сохранить собственника'}
+          </button>
+        </div>
+
+        <FeedbackBanner feedback={ownerFeedback} />
+      </section>
+
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">
           Условия аренды
@@ -1944,9 +2056,11 @@ function FinesTab({
 export function CarManageClient({
   car,
   drivers = EMPTY_DRIVERS,
+  owners = EMPTY_OWNERS,
 }: {
   car: CarDetailDto;
   drivers?: DriverDto[];
+  owners?: OwnerOptionDto[];
 }) {
   const router = useRouter();
   const [carState, setCarState] = useState<CarDetailDto>(car);
@@ -2101,6 +2215,7 @@ export function CarManageClient({
           <RentalTab
             car={carState}
             drivers={driverList}
+            owners={owners}
             onDriverCreated={handleDriverCreated}
             onCarUpdated={refreshCar}
           />

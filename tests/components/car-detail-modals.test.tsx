@@ -794,4 +794,20 @@ describe('CarDetailModal and nested modals', () => {
     expect(within(rentalSection).getByText('с 01.09.2026')).toBeInTheDocument();
     expect(within(rentalSection).queryByText(/по 01\.09\.2026/)).not.toBeInTheDocument();
   });
+
+  it('displays owner name in «Аренда» section when ownerName is set', async () => {
+    stubCarDetailFetch({
+      ...SAMPLE_CAR_DETAIL,
+      ownerId: 5,
+      ownerName: 'Сергей Волков',
+    });
+
+    render(
+      <CarDetailModal carId={1} userRole="admin" onClose={vi.fn()} onUpdated={vi.fn()} />,
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    const rentalSection = within(dialog).getByRole('region', { name: 'Аренда' });
+    expect(within(rentalSection).getByText('Собственник: Сергей Волков')).toBeInTheDocument();
+  });
 });

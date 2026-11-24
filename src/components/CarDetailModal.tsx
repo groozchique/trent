@@ -406,6 +406,12 @@ export function CarDetailModal({
                 )}
               </div>
 
+              {visibleCar.ownerName && (
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Собственник: {visibleCar.ownerName}
+                </p>
+              )}
+
               {visibleCar.rental ? (
                 <button
                   type="button"

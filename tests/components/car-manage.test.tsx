@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { SessionUser } from '@/lib/auth/session';
-import type { CarDetailDto, DriverSummaryDto } from '@/lib/validation';
+import type { CarDetailDto, DriverSummaryDto, OwnerOptionDto } from '@/lib/validation';
 
 const pushMock = vi.fn();
 const refreshMock = vi.fn();
@@ -14,6 +14,7 @@ const notFoundMock = vi.fn((): never => {
 const getCurrentUserMock = vi.fn<() => Promise<SessionUser | null>>();
 const getCarDetailMock = vi.fn<(db: unknown, carId: number) => Promise<CarDetailDto | null>>();
 const listDriverSummariesMock = vi.fn<() => Promise<DriverSummaryDto[]>>();
+const listOwnersMock = vi.fn<() => Promise<OwnerOptionDto[]>>();
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -40,8 +41,27 @@ vi.mock('@/lib/drivers', () => ({
   listDriverSummaries: () => listDriverSummariesMock(),
 }));
 
+vi.mock('@/lib/users', () => ({
+  listOwners: () => listOwnersMock(),
+}));
+
 import ManageCarPage from '@/app/cars/[id]/manage/page';
 import { CarManageClient } from '@/components/CarManageClient';
+
+const SAMPLE_OWNERS: OwnerOptionDto[] = [
+  {
+    id: 5,
+    username: 'owner1',
+    displayName: 'Сергей Волков',
+    label: 'Сергей Волков',
+  },
+  {
+    id: 6,
+    username: 'owner2',
+    displayName: null,
+    label: 'owner2',
+  },
+];
 
 const SAMPLE_DRIVERS: DriverSummaryDto[] = [
   {
@@ -173,6 +193,7 @@ describe('ManageCarPage server RBAC guard', () => {
     getCurrentUserMock.mockReset();
     getCarDetailMock.mockReset();
     listDriverSummariesMock.mockReset();
+    listOwnersMock.mockReset();
   });
 
   afterEach(() => {
@@ -188,6 +209,7 @@ describe('ManageCarPage server RBAC guard', () => {
     expect(redirectMock).toHaveBeenCalledWith('/login');
     expect(getCarDetailMock).not.toHaveBeenCalled();
     expect(listDriverSummariesMock).not.toHaveBeenCalled();
+    expect(listOwnersMock).not.toHaveBeenCalled();
   });
 
   it('redirects viewer user to /', async () => {
@@ -199,6 +221,19 @@ describe('ManageCarPage server RBAC guard', () => {
     expect(redirectMock).toHaveBeenCalledWith('/');
     expect(getCarDetailMock).not.toHaveBeenCalled();
     expect(listDriverSummariesMock).not.toHaveBeenCalled();
+    expect(listOwnersMock).not.toHaveBeenCalled();
+  });
+
+  it('redirects owner user to /', async () => {
+    getCurrentUserMock.mockResolvedValue({ id: 5, username: 'owner1', role: 'owner' });
+
+    await expect(
+      ManageCarPage({ params: Promise.resolve({ id: '7' }) }),
+    ).rejects.toThrow('NEXT_REDIRECT:/');
+    expect(redirectMock).toHaveBeenCalledWith('/');
+    expect(getCarDetailMock).not.toHaveBeenCalled();
+    expect(listDriverSummariesMock).not.toHaveBeenCalled();
+    expect(listOwnersMock).not.toHaveBeenCalled();
   });
 
   it('calls notFound for invalid car id or missing car', async () => {
@@ -210,6 +245,7 @@ describe('ManageCarPage server RBAC guard', () => {
     expect(notFoundMock).toHaveBeenCalledTimes(1);
     expect(getCarDetailMock).not.toHaveBeenCalled();
     expect(listDriverSummariesMock).not.toHaveBeenCalled();
+    expect(listOwnersMock).not.toHaveBeenCalled();
 
     getCarDetailMock.mockResolvedValue(null);
     await expect(
@@ -218,17 +254,20 @@ describe('ManageCarPage server RBAC guard', () => {
     expect(notFoundMock).toHaveBeenCalledTimes(2);
     expect(getCarDetailMock).toHaveBeenCalledWith({}, 999);
     expect(listDriverSummariesMock).not.toHaveBeenCalled();
+    expect(listOwnersMock).not.toHaveBeenCalled();
   });
 
-  it('renders CarManageClient for admin when car exists and loads drivers', async () => {
+  it('renders CarManageClient for admin when car exists and loads drivers and owners', async () => {
     getCurrentUserMock.mockResolvedValue({ id: 1, username: 'admin', role: 'admin' });
     getCarDetailMock.mockResolvedValue(SAMPLE_CAR);
     listDriverSummariesMock.mockResolvedValue(SAMPLE_DRIVERS);
+    listOwnersMock.mockResolvedValue(SAMPLE_OWNERS);
 
     const element = await ManageCarPage({ params: Promise.resolve({ id: '7' }) });
     render(element);
 
     expect(listDriverSummariesMock).toHaveBeenCalledTimes(1);
+    expect(listOwnersMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { name: /Kia Rio/i })).toBeInTheDocument();
     expect(screen.getByText('А123ВС 777')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /На дашборд/i })).toHaveAttribute('href', '/');
@@ -238,6 +277,9 @@ describe('ManageCarPage server RBAC guard', () => {
     expect(driverSelect.value).toBe('1');
     expect(within(driverSelect).getByRole('option', { name: 'Петров Дмитрий Иванович' })).toBeInTheDocument();
     expect(within(driverSelect).queryByRole('option', { name: 'Архивов Сергей Петрович' })).not.toBeInTheDocument();
+
+    const ownerSelect = screen.getByLabelText('Собственник автомобиля') as HTMLSelectElement;
+    expect(within(ownerSelect).getByRole('option', { name: 'Сергей Волков' })).toBeInTheDocument();
   });
 });
 
@@ -1709,5 +1751,109 @@ describe('CarManageClient', () => {
     });
 
     expect(await screen.findByRole('status')).toHaveTextContent(/Настройки аренды сохранены/i);
+  });
+
+  it('assigns and clears owner via PATCH /api/cars/[id] inside «Аренда» tab even when rental is null, and syncs on rerender', async () => {
+    let currentOwnerId: number | null = null;
+    let currentOwnerName: string | null = null;
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/cars/7' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as { ownerId: number | null };
+        currentOwnerId = body.ownerId;
+        currentOwnerName =
+          body.ownerId === 5 ? 'Сергей Волков' : body.ownerId === 6 ? 'owner2' : null;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            car: {
+              ...SAMPLE_CAR,
+              status: 'available',
+              ownerId: currentOwnerId,
+              ownerName: currentOwnerName,
+            },
+          }),
+        });
+      }
+      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            car: {
+              ...SAMPLE_CAR,
+              status: 'available',
+              rental: null,
+              ownerId: currentOwnerId,
+              ownerName: currentOwnerName,
+            },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(
+      <CarManageClient
+        car={{ ...SAMPLE_CAR, status: 'available', rental: null, ownerId: null, ownerName: null }}
+        drivers={SAMPLE_DRIVERS}
+        owners={SAMPLE_OWNERS}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Аренда' }));
+
+    const ownerSelect = screen.getByLabelText('Собственник автомобиля') as HTMLSelectElement;
+    expect(ownerSelect.value).toBe('');
+    expect(within(ownerSelect).getByRole('option', { name: 'Не указан' })).toBeInTheDocument();
+    expect(within(ownerSelect).getByRole('option', { name: 'Сергей Волков' })).toBeInTheDocument();
+    expect(within(ownerSelect).getByRole('option', { name: 'owner2' })).toBeInTheDocument();
+
+    fireEvent.change(ownerSelect, { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить собственника' }));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        ([url, init]) => url === '/api/cars/7' && init?.method === 'PATCH',
+      );
+      expect(patchCall).toBeDefined();
+      expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({ ownerId: 5 });
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Собственник сохранён');
+    expect(ownerSelect.value).toBe('5');
+
+    // Clear owner back to null
+    fireEvent.change(ownerSelect, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить собственника' }));
+
+    await waitFor(() => {
+      const patchCalls = fetchMock.mock.calls.filter(
+        ([url, init]) => url === '/api/cars/7' && init?.method === 'PATCH',
+      );
+      expect(patchCalls).toHaveLength(2);
+      expect(JSON.parse(String(patchCalls[1]?.[1]?.body))).toEqual({ ownerId: null });
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Собственник сохранён');
+    expect(ownerSelect.value).toBe('');
+
+    // Rerender with different car.ownerId syncs selectedOwnerId
+    rerender(
+      <CarManageClient
+        car={{
+          ...SAMPLE_CAR,
+          status: 'available',
+          rental: null,
+          ownerId: 6,
+          ownerName: 'owner2',
+        }}
+        drivers={SAMPLE_DRIVERS}
+        owners={SAMPLE_OWNERS}
+      />,
+    );
+    expect((screen.getByLabelText('Собственник автомобиля') as HTMLSelectElement).value).toBe('6');
   });
 });

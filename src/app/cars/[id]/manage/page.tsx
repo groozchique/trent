@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { getCurrentUser } from '@/lib/auth/session';
 import { getCarDetail } from '@/lib/cars';
 import { listDriverSummaries } from '@/lib/drivers';
+import { listOwners } from '@/lib/users';
 import { parsePositiveIntId } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,10 @@ export default async function ManageCarPage({
     notFound();
   }
 
-  const drivers = await listDriverSummaries(db);
+  const [drivers, owners] = await Promise.all([
+    listDriverSummaries(db),
+    listOwners(db),
+  ]);
 
-  return <CarManageClient car={car} drivers={drivers} />;
+  return <CarManageClient car={car} drivers={drivers} owners={owners} />;
 }
