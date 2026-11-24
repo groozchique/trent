@@ -901,8 +901,20 @@ describe('Drivers & Admin Users libraries and API routes', () => {
     const ownerToken = await loginUserId(ownerPetrov.id);
     expect(await db.select().from(sessions).where(eq(sessions.userId, ownerPetrov.id))).toHaveLength(1);
 
-    // Changing owner role -> viewer atomically detaches cars.ownerId = null and invalidates sessions
+    // Updating displayName alone preserves active sessions
     await loginUserId(adminId);
+    const renameWhileLoggedInRes = await updateUserPatch(
+      jsonReq('http://localhost/api/users', 'PATCH', { displayName: 'Пётр Активный' }),
+      idCtx(ownerPetrov.id),
+    );
+    expect(renameWhileLoggedInRes.status).toBe(200);
+    expect(await db.select().from(sessions).where(eq(sessions.userId, ownerPetrov.id))).toHaveLength(1);
+    expect(await sessionModule.getSessionUser(db, ownerToken)).toMatchObject({
+      id: ownerPetrov.id,
+      displayName: 'Пётр Активный',
+    });
+
+    // Changing owner role -> viewer atomically detaches cars.ownerId = null and invalidates sessions
     const demoteRes = await updateUserPatch(
       jsonReq('http://localhost/api/users', 'PATCH', { role: 'viewer' }),
       idCtx(ownerPetrov.id),

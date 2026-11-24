@@ -400,23 +400,18 @@ export async function listCarSummariesWithSummary(
     options?.ownerId !== undefined ? { ownerId: options.ownerId } : undefined,
   );
   const carIds = inputs.carRows.map((row) => row.car.id);
+  const maintBase = database
+    .select({
+      performedAt: maintenanceRecords.performedAt,
+      totalCost: maintenanceRecords.totalCost,
+    })
+    .from(maintenanceRecords);
   const maintRows =
-    options?.ownerId !== undefined
-      ? carIds.length === 0
-        ? []
-        : await database
-            .select({
-              performedAt: maintenanceRecords.performedAt,
-              totalCost: maintenanceRecords.totalCost,
-            })
-            .from(maintenanceRecords)
-            .where(inArray(maintenanceRecords.carId, carIds))
-      : await database
-          .select({
-            performedAt: maintenanceRecords.performedAt,
-            totalCost: maintenanceRecords.totalCost,
-          })
-          .from(maintenanceRecords);
+    carIds.length === 0
+      ? []
+      : await (options?.ownerId !== undefined
+          ? maintBase.where(inArray(maintenanceRecords.carId, carIds))
+          : maintBase);
 
   const carSummaries = buildCarSummaries(inputs, todayIso);
   const summary = computeFleetFinancialSummary(

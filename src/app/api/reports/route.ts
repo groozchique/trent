@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { requireAuth } from '@/lib/auth/session';
+import { requireStaff } from '@/lib/auth/session';
 import { handleApiError } from '@/lib/cars';
 import { buildReport, getCalendarMonthRange, getIsoWeekRange } from '@/lib/reports';
 import { reportQuerySchema } from '@/lib/validation';
 
 export async function GET(request: Request) {
   try {
-    await requireAuth();
+    await requireStaff();
     const { searchParams } = new URL(request.url);
 
     const parsed = reportQuerySchema.parse({

@@ -36,24 +36,30 @@ export async function PATCH(request: Request, context: RouteIdContext) {
     const carId = await parseCarIdParam(context);
     const data = await parseJsonBody(request, updateCarSchema);
 
-    if (data.ownerId !== undefined && data.ownerId !== null) {
-      const [ownerRow] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(and(eq(users.id, data.ownerId), eq(users.role, 'owner')))
-        .limit(1);
-      if (!ownerRow) {
-        throw new ApiError(400, 'Указанный собственник не найден');
+    const updated = db.transaction((tx) => {
+      if (data.ownerId !== undefined && data.ownerId !== null) {
+        const ownerRow = tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, data.ownerId), eq(users.role, 'owner')))
+          .limit(1)
+          .get();
+        if (!ownerRow) {
+          throw new ApiError(400, 'Указанный собственник не найден');
+        }
       }
-    }
 
-    const updated = await db
-      .update(cars)
-      .set(data)
-      .where(eq(cars.id, carId))
-      .returning({ id: cars.id });
+      return (
+        tx
+          .update(cars)
+          .set(data)
+          .where(eq(cars.id, carId))
+          .returning({ id: cars.id })
+          .get() ?? null
+      );
+    });
 
-    if (updated.length === 0) {
+    if (!updated) {
       return NextResponse.json({ error: 'Автомобиль не найден' }, { status: 404 });
     }
 

@@ -21,40 +21,36 @@ export function TopBar({ user }: { user: SessionUser | null }) {
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const navItems = user
-    ? user.role === 'owner'
-      ? [
-          {
-            href: '/',
-            label: 'Автопарк',
-            isActive: pathname === '/' || pathname.startsWith('/cars'),
-          },
-        ]
-      : [
-          {
-            href: '/',
-            label: 'Автопарк',
-            isActive: pathname === '/' || pathname.startsWith('/cars'),
-          },
-          {
-            href: '/drivers',
-            label: 'Водители',
-            isActive: pathname === '/drivers' || pathname.startsWith('/drivers/'),
-          },
-          {
-            href: '/reports',
-            label: 'Отчёты',
-            isActive: pathname === '/reports' || pathname.startsWith('/reports/'),
-          },
-          ...(user.role === 'admin'
-            ? [
-                {
-                  href: '/users',
-                  label: 'Пользователи',
-                  isActive: pathname === '/users' || pathname.startsWith('/users/'),
-                },
-              ]
-            : []),
-        ]
+    ? [
+        {
+          href: '/',
+          label: 'Автопарк',
+          isActive: pathname === '/' || pathname.startsWith('/cars'),
+        },
+        ...(user.role !== 'owner'
+          ? [
+              {
+                href: '/drivers',
+                label: 'Водители',
+                isActive: pathname === '/drivers' || pathname.startsWith('/drivers/'),
+              },
+              {
+                href: '/reports',
+                label: 'Отчёты',
+                isActive: pathname === '/reports' || pathname.startsWith('/reports/'),
+              },
+            ]
+          : []),
+        ...(user.role === 'admin'
+          ? [
+              {
+                href: '/users',
+                label: 'Пользователи',
+                isActive: pathname === '/users' || pathname.startsWith('/users/'),
+              },
+            ]
+          : []),
+      ]
     : [];
 
   async function handleLogout() {

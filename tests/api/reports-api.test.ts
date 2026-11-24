@@ -30,7 +30,7 @@ vi.mock('@/db', async (importOriginal) => {
   };
 });
 
-async function loginAs(role: 'admin' | 'viewer'): Promise<void> {
+async function loginAs(role: 'admin' | 'viewer' | 'owner'): Promise<void> {
   const [user] = await mockState.db!.select().from(users).where(eq(users.role, role)).limit(1);
   const { token } = await createSession(mockState.db!, user.id);
   mockState.cookieJar.set(SESSION_COOKIE_NAME, token);
@@ -55,6 +55,12 @@ describe('GET /api/reports', () => {
   it('returns 401 when unauthenticated', async () => {
     const res = await getReportsGet(new Request('http://localhost/api/reports?type=weekly&date=2026-11-25'));
     expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when authenticated as owner', async () => {
+    await loginAs('owner');
+    const res = await getReportsGet(new Request('http://localhost/api/reports?type=weekly&date=2026-11-25'));
+    expect(res.status).toBe(403);
   });
 
   it('returns 200 for viewer and admin across weekly, monthly, single carId, and includeMaintenance=true', async () => {
