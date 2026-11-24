@@ -11,8 +11,12 @@ import { createCarSchema, parseJsonBody } from '@/lib/validation';
 
 export async function GET() {
   try {
-    await requireAuth();
-    const result = await listCarSummariesWithSummary(db);
+    const user = await requireAuth();
+    const result = await listCarSummariesWithSummary(
+      db,
+      undefined,
+      user.role === 'owner' ? { ownerId: user.id } : undefined,
+    );
     return NextResponse.json(result);
   } catch (err) {
     return handleApiError(err);

@@ -5,6 +5,7 @@ import { carDocuments, cars, drivers, fines, maintenanceParts, maintenanceRecord
 import { seedDatabase } from '@/db/seed';
 import { SESSION_COOKIE_NAME, createSession } from '@/lib/auth/session';
 import { handleApiError } from '@/lib/cars';
+import { shiftUtcDaysIso } from '@/lib/format';
 import { createCarSchema, updateCarSchema, upsertRentalSchema } from '@/lib/validation';
 import { GET as listCarsGet, POST as createCarPost } from '@/app/api/cars/route';
 import {
@@ -62,9 +63,15 @@ function idCtx(id: number | string): { params: Promise<{ id: string }> } {
   return { params: Promise.resolve({ id: String(id) }) };
 }
 
-async function loginAs(role: 'admin' | 'viewer'): Promise<void> {
+async function loginAs(role: 'admin' | 'viewer' | 'owner'): Promise<number> {
   const [user] = await mockState.db!.select().from(users).where(eq(users.role, role)).limit(1);
   const { token } = await createSession(mockState.db!, user.id);
+  mockState.cookieJar.set(SESSION_COOKIE_NAME, token);
+  return user.id;
+}
+
+async function loginUserId(userId: number): Promise<void> {
+  const { token } = await createSession(mockState.db!, userId);
   mockState.cookieJar.set(SESSION_COOKIE_NAME, token);
 }
 
@@ -738,5 +745,221 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
     expect(detail.maintenance.map((m) => m.performedAt)).toEqual(['2026-11-18', '2026-10-01']);
     expect(detail.maintenance[0].parts).toHaveLength(3);
     expect(detail.maintenance[1].parts).toHaveLength(0);
+  });
+
+  it('supports ownerId assignment via PATCH /api/cars/[id] and owner-scoped car summaries & detail access (Review Focus #2)', async () => {
+    const db = mockState.db!;
+    const adminId = await loginAs('admin');
+    const [viewer] = await db.select().from(users).where(eq(users.role, 'viewer')).limit(1);
+    const [owner1] = await db.select().from(users).where(eq(users.role, 'owner')).limit(1);
+
+    const [owner2] = await db
+      .insert(users)
+      .values({
+        username: 'owner_no_display',
+        displayName: null,
+        passwordHash: 'hash',
+        role: 'owner',
+      })
+      .returning();
+
+    const [car1, car2, car3, car4] = await db
+      .insert(cars)
+      .values([
+        { plate: 'А111АА 777', brand: 'Kia', model: 'Rio', status: 'available', mileage: 10000 },
+        {
+          plate: 'В222ВВ 777',
+          brand: 'Hyundai',
+          model: 'Solaris',
+          status: 'in_rent',
+          mileage: 20000,
+          ownerId: owner1.id,
+        },
+        {
+          plate: 'Е333ЕЕ 777',
+          brand: 'Skoda',
+          model: 'Octavia',
+          status: 'in_rent',
+          mileage: 30000,
+          ownerId: owner2.id,
+        },
+        { plate: 'К444КК 777', brand: 'Geely', model: 'Coolray', status: 'available', mileage: 40000 },
+      ])
+      .returning();
+
+    // Assign owner1 -> returns CarSummaryDto with ownerName = displayName
+    const assignOwner1Res = await updateCarPatch(
+      jsonReq('http://localhost/api/cars', 'PATCH', { ownerId: owner1.id }),
+      idCtx(car1.id),
+    );
+    expect(assignOwner1Res.status).toBe(200);
+    expect(((await assignOwner1Res.json()) as { car: { ownerId: number | null; ownerName: string | null } }).car).toMatchObject({
+      ownerId: owner1.id,
+      ownerName: 'Сергей Волков',
+    });
+
+    // Assign owner2 (no displayName) -> falls back to username
+    const assignOwner2Res = await updateCarPatch(
+      jsonReq('http://localhost/api/cars', 'PATCH', { ownerId: owner2.id }),
+      idCtx(car1.id),
+    );
+    expect(assignOwner2Res.status).toBe(200);
+    expect(((await assignOwner2Res.json()) as { car: { ownerId: number | null; ownerName: string | null } }).car).toMatchObject({
+      ownerId: owner2.id,
+      ownerName: 'owner_no_display',
+    });
+
+    // Detach with null -> ownerId: null, ownerName: null
+    const detachRes = await updateCarPatch(
+      jsonReq('http://localhost/api/cars', 'PATCH', { ownerId: null }),
+      idCtx(car1.id),
+    );
+    expect(detachRes.status).toBe(200);
+    expect(((await detachRes.json()) as { car: { ownerId: number | null; ownerName: string | null } }).car).toMatchObject({
+      ownerId: null,
+      ownerName: null,
+    });
+
+    // Reject non-existent user or non-owner user (admin/viewer) with 400
+    for (const invalidOwnerId of [999999, adminId, viewer.id]) {
+      const badRes = await updateCarPatch(
+        jsonReq('http://localhost/api/cars', 'PATCH', { ownerId: invalidOwnerId }),
+        idCtx(car1.id),
+      );
+      expect(badRes.status).toBe(400);
+      expect(((await badRes.json()) as { error: string }).error).toMatch(/[А-Яа-яЁё]/);
+    }
+
+    // Set up rentals, payments, maintenance, fines, and deadlines on car2 (owner1), car3 (owner2), car4 (unowned)
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const dMinus2 = shiftUtcDaysIso(todayIso, -2);
+    const dMinus1 = shiftUtcDaysIso(todayIso, -1);
+
+    const [rOwner1, rOwner2] = await db
+      .insert(rentals)
+      .values([
+        {
+          carId: car2.id,
+          renterName: 'Водитель 1',
+          rateAmount: 2000,
+          periodicity: 'daily',
+          startDate: dMinus2,
+          active: true,
+          managerCommissionPercent: 10,
+        },
+        {
+          carId: car3.id,
+          renterName: 'Водитель 2',
+          rateAmount: 5000,
+          periodicity: 'daily',
+          startDate: dMinus2,
+          active: true,
+          managerCommissionPercent: 20,
+        },
+      ])
+      .returning();
+
+    await db.insert(rentalPayments).values([
+      { rentalId: rOwner1.id, dueDate: dMinus2, amount: 2000, paidAt: `${dMinus2}T10:00:00Z` },
+      { rentalId: rOwner2.id, dueDate: dMinus2, amount: 5000, paidAt: `${dMinus2}T10:00:00Z` },
+    ]);
+
+    await db.insert(maintenanceRecords).values([
+      { carId: car2.id, title: 'ТО-1', performedAt: dMinus1, mileage: 20100, laborCost: 500, totalCost: 500 },
+      { carId: car3.id, title: 'ТО-2', performedAt: dMinus1, mileage: 30100, laborCost: 1500, totalCost: 1500 },
+      { carId: car4.id, title: 'ТО-3', performedAt: dMinus1, mileage: 40100, laborCost: 900, totalCost: 900 },
+    ]);
+
+    await db.insert(carDocuments).values([
+      { carId: car2.id, type: 'osago', expiresAt: dMinus1 },
+      { carId: car3.id, type: 'osago', expiresAt: dMinus1 },
+    ]);
+
+    await db.insert(fines).values([
+      {
+        carId: car2.id,
+        resolutionNumber: '18810177261100009001',
+        violatedAt: `${dMinus1}T10:00:00+03:00`,
+        amount: 1000,
+        paymentDeadline: '2027-01-20',
+        description: 'Штраф owner1',
+        status: 'unpaid',
+      },
+      {
+        carId: car3.id,
+        resolutionNumber: '18810177261100009002',
+        violatedAt: `${dMinus1}T10:00:00+03:00`,
+        amount: 3000,
+        paymentDeadline: '2027-01-20',
+        description: 'Штраф owner2',
+        status: 'unpaid',
+      },
+    ]);
+
+    // Owner1 logs in -> GET /api/cars returns only car2 and owner1-scoped summary
+    await loginUserId(owner1.id);
+    const ownerListRes = await listCarsGet();
+    expect(ownerListRes.status).toBe(200);
+    const ownerListBody = (await ownerListRes.json()) as {
+      cars: Array<{ id: number; ownerId: number | null; ownerName: string | null }>;
+      summary: {
+        paidRental30d: number;
+        managerIncome30d: number;
+        maintenanceCost30d: number;
+        netIncome30d: number;
+        totalRentDebt30d: number;
+        totalUnpaidFinesSum: number;
+        totalUnpaidFinesCount: number;
+        urgentDeadlineCarsCount: number;
+      };
+    };
+    expect(ownerListBody.cars.map((c) => c.id)).toEqual([car2.id]);
+    expect(ownerListBody.cars[0]).toMatchObject({
+      ownerId: owner1.id,
+      ownerName: 'Сергей Волков',
+    });
+    expect(ownerListBody.summary).toMatchObject({
+      paidRental30d: 2000,
+      managerIncome30d: 200,
+      maintenanceCost30d: 500,
+      netIncome30d: 1300,
+      totalRentDebt30d: 2000,
+      totalUnpaidFinesSum: 1000,
+      totalUnpaidFinesCount: 1,
+      urgentDeadlineCarsCount: 1,
+    });
+
+    // Owner1 GET /api/cars/[id]: 200 for own car with ownerName, 403 for other owner's car and unowned car
+    const ownDetailRes = await getCarDetailGet(new Request('http://localhost/api/cars/2'), idCtx(car2.id));
+    expect(ownDetailRes.status).toBe(200);
+    expect(((await ownDetailRes.json()) as { car: { id: number; ownerId: number | null; ownerName: string | null } }).car).toMatchObject({
+      id: car2.id,
+      ownerId: owner1.id,
+      ownerName: 'Сергей Волков',
+    });
+
+    expect((await getCarDetailGet(new Request('http://localhost/api/cars/3'), idCtx(car3.id))).status).toBe(403);
+    expect((await getCarDetailGet(new Request('http://localhost/api/cars/4'), idCtx(car4.id))).status).toBe(403);
+
+    // Owner with 0 cars gets empty list and zeroed summary
+    const [ownerEmpty] = await db
+      .insert(users)
+      .values({ username: 'owner_empty', passwordHash: 'hash', role: 'owner' })
+      .returning();
+    await loginUserId(ownerEmpty.id);
+    const emptyListRes = await listCarsGet();
+    expect(emptyListRes.status).toBe(200);
+    const emptyBody = (await emptyListRes.json()) as {
+      cars: unknown[];
+      summary: { paidRental30d: number; maintenanceCost30d: number; netIncome30d: number; totalRentDebt30d: number; urgentDeadlineCarsCount: number };
+    };
+    expect(emptyBody.cars).toEqual([]);
+    expect(emptyBody.summary).toMatchObject({
+      paidRental30d: 0,
+      maintenanceCost30d: 0,
+      netIncome30d: 0,
+      totalRentDebt30d: 0,
+      urgentDeadlineCarsCount: 0,
+    });
   });
 });

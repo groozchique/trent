@@ -12,6 +12,9 @@ export default async function DriversPage() {
   if (!user) {
     redirect('/login');
   }
+  if (user.role === 'owner') {
+    redirect('/');
+  }
 
   const drivers = await listDriverSummaries(db);
 

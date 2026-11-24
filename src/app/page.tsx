@@ -12,7 +12,11 @@ export default async function DashboardPage() {
     redirect('/login');
   }
 
-  const { cars, summary } = await listCarSummariesWithSummary(db);
+  const { cars, summary } = await listCarSummariesWithSummary(
+    db,
+    undefined,
+    user.role === 'owner' ? { ownerId: user.id } : undefined,
+  );
 
   return <DashboardClient initialCars={cars} initialSummary={summary} userRole={user.role} />;
 }

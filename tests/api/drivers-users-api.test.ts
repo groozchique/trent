@@ -17,8 +17,9 @@ import { seedDatabase } from '@/db/seed';
 import { verifyPassword } from '@/lib/auth/password';
 import * as sessionModule from '@/lib/auth/session';
 import { SESSION_COOKIE_NAME, createSession } from '@/lib/auth/session';
-import { getDriverDetail, listDriverSummaries } from '@/lib/drivers';
-import { listUsersSafe } from '@/lib/users';
+import { listDriverSummaries } from '@/lib/drivers';
+import { getDriverDetail } from '@/lib/drivers';
+import { listOwners, listUsersSafe } from '@/lib/users';
 import { shiftUtcDaysIso } from '@/lib/format';
 import { POST as loginPost } from '@/app/api/auth/login/route';
 import { POST as endRentalPost } from '@/app/api/cars/[id]/rental/end/route';
@@ -78,7 +79,7 @@ function idCtx(id: number | string): { params: Promise<{ id: string }> } {
   return { params: Promise.resolve({ id: String(id) }) };
 }
 
-async function loginAs(role: 'admin' | 'viewer'): Promise<number> {
+async function loginAs(role: 'admin' | 'viewer' | 'owner'): Promise<number> {
   const [user] = await mockState.db!.select().from(users).where(eq(users.role, role)).limit(1);
   const { token } = await createSession(mockState.db!, user.id);
   mockState.cookieJar.set(SESSION_COOKIE_NAME, token);
@@ -153,6 +154,11 @@ describe('Drivers & Admin Users libraries and API routes', () => {
         )
       ).status,
     ).toBe(403);
+
+    // Owner -> 403 on GET /api/drivers and GET /api/drivers/[id] (Review Focus #2)
+    await loginAs('owner');
+    expect((await listDriversGet()).status).toBe(403);
+    expect((await getDriverDetailGet(new Request('http://localhost/api/drivers/1'), idCtx(driver.id))).status).toBe(403);
 
     // Admin validation -> Russian 400 and 404
     await loginAs('admin');
@@ -808,5 +814,127 @@ describe('Drivers & Admin Users libraries and API routes', () => {
     );
     expect(noopRoleRes.status).toBe(200);
     expect((await listUsersGet()).status).toBe(200);
+  });
+
+  it('supports owner users with displayName, listOwners, atomic car detachment on role change, and deletion cleanup (Review Focus #1)', async () => {
+    const db = mockState.db!;
+    const adminId = await loginAs('admin');
+    const [seededOwner] = await db.select().from(users).where(eq(users.role, 'owner')).limit(1);
+
+    // Create owner with displayName
+    const createOwnerRes = await createUserPost(
+      jsonReq('http://localhost/api/users', 'POST', {
+        username: 'owner_petrov',
+        displayName: '  Пётр Петров  ',
+        password: 'password123',
+        role: 'owner',
+      }),
+    );
+    expect(createOwnerRes.status).toBe(201);
+    const { user: ownerPetrov } = (await createOwnerRes.json()) as {
+      user: { id: number; username: string; displayName: string | null; role: string };
+    };
+    expect(ownerPetrov).toMatchObject({
+      username: 'owner_petrov',
+      displayName: 'Пётр Петров',
+      role: 'owner',
+    });
+
+    // Create owner without displayName
+    const createOwnerNoNameRes = await createUserPost(
+      jsonReq('http://localhost/api/users', 'POST', {
+        username: 'owner_noname',
+        password: 'password123',
+        role: 'owner',
+      }),
+    );
+    expect(createOwnerNoNameRes.status).toBe(201);
+    const { user: ownerNoName } = (await createOwnerNoNameRes.json()) as {
+      user: { id: number; username: string; displayName: string | null; role: string };
+    };
+    expect(ownerNoName.displayName).toBeNull();
+
+    // listOwners returns OwnerOptionDto[] with resolved label
+    const owners1 = await listOwners(db);
+    expect(owners1.map((o) => ({ id: o.id, username: o.username, label: o.label }))).toEqual([
+      { id: seededOwner.id, username: 'owner', label: 'Сергей Волков' },
+      { id: ownerPetrov.id, username: 'owner_petrov', label: 'Пётр Петров' },
+      { id: ownerNoName.id, username: 'owner_noname', label: 'owner_noname' },
+    ]);
+
+    // Update displayName (trimmed) and clear with null
+    const patchNameRes = await updateUserPatch(
+      jsonReq('http://localhost/api/users', 'PATCH', { displayName: '  Пётр Иванович  ' }),
+      idCtx(ownerPetrov.id),
+    );
+    expect(patchNameRes.status).toBe(200);
+    expect(
+      ((await patchNameRes.json()) as { user: { displayName: string | null } }).user.displayName,
+    ).toBe('Пётр Иванович');
+
+    const owners2 = await listOwners(db);
+    expect(owners2.find((o) => o.id === ownerPetrov.id)?.label).toBe('Пётр Иванович');
+
+    const clearNameRes = await updateUserPatch(
+      jsonReq('http://localhost/api/users', 'PATCH', { displayName: null }),
+      idCtx(ownerPetrov.id),
+    );
+    expect(clearNameRes.status).toBe(200);
+    expect(
+      ((await clearNameRes.json()) as { user: { displayName: string | null } }).user.displayName,
+    ).toBeNull();
+
+    const owners3 = await listOwners(db);
+    expect(owners3.find((o) => o.id === ownerPetrov.id)?.label).toBe('owner_petrov');
+
+    // Assign cars to owners & create active session for ownerPetrov
+    const [carA, carB, carSeeded, carNoName] = await db
+      .insert(cars)
+      .values([
+        { plate: 'А001АА 77', brand: 'Kia', model: 'Rio', status: 'available', mileage: 1000, ownerId: ownerPetrov.id },
+        { plate: 'В002ВВ 77', brand: 'Hyundai', model: 'Solaris', status: 'available', mileage: 2000, ownerId: ownerPetrov.id },
+        { plate: 'Е003ЕЕ 77', brand: 'Skoda', model: 'Octavia', status: 'available', mileage: 3000, ownerId: seededOwner.id },
+        { plate: 'К004КК 77', brand: 'Geely', model: 'Coolray', status: 'available', mileage: 4000, ownerId: ownerNoName.id },
+      ])
+      .returning();
+
+    const ownerToken = await loginUserId(ownerPetrov.id);
+    expect(await db.select().from(sessions).where(eq(sessions.userId, ownerPetrov.id))).toHaveLength(1);
+
+    // Changing owner role -> viewer atomically detaches cars.ownerId = null and invalidates sessions
+    await loginUserId(adminId);
+    const demoteRes = await updateUserPatch(
+      jsonReq('http://localhost/api/users', 'PATCH', { role: 'viewer' }),
+      idCtx(ownerPetrov.id),
+    );
+    expect(demoteRes.status).toBe(200);
+    expect(((await demoteRes.json()) as { user: { role: string } }).user.role).toBe('viewer');
+
+    const [freshCarA] = await db.select().from(cars).where(eq(cars.id, carA.id));
+    const [freshCarB] = await db.select().from(cars).where(eq(cars.id, carB.id));
+    const [freshCarSeeded] = await db.select().from(cars).where(eq(cars.id, carSeeded.id));
+    expect(freshCarA.ownerId).toBeNull();
+    expect(freshCarB.ownerId).toBeNull();
+    expect(freshCarSeeded.ownerId).toBe(seededOwner.id);
+    expect(await db.select().from(sessions).where(eq(sessions.userId, ownerPetrov.id))).toHaveLength(0);
+    expect(await sessionModule.getSessionUser(db, ownerToken)).toBeNull();
+
+    // Changing owner role -> admin also detaches cars.ownerId = null
+    const promoteRes = await updateUserPatch(
+      jsonReq('http://localhost/api/users', 'PATCH', { role: 'admin' }),
+      idCtx(ownerNoName.id),
+    );
+    expect(promoteRes.status).toBe(200);
+    const [freshCarNoName] = await db.select().from(cars).where(eq(cars.id, carNoName.id));
+    expect(freshCarNoName.ownerId).toBeNull();
+
+    // Deleting an owner clears cars.ownerId = null
+    const delOwnerRes = await deleteUserDelete(
+      new Request('http://localhost/api/users', { method: 'DELETE' }),
+      idCtx(seededOwner.id),
+    );
+    expect(delOwnerRes.status).toBe(200);
+    const [afterDeleteCarSeeded] = await db.select().from(cars).where(eq(cars.id, carSeeded.id));
+    expect(afterDeleteCarSeeded.ownerId).toBeNull();
   });
 });

@@ -14,6 +14,7 @@ import {
   getSessionUser,
   requireAdmin,
   requireAuth,
+  requireStaff,
 } from '@/lib/auth/session';
 import { POST as loginPost } from '@/app/api/auth/login/route';
 import { POST as logoutPost } from '@/app/api/auth/logout/route';
@@ -85,7 +86,7 @@ describe('password hashing and sessions', () => {
     expect(expiresAt).toBeGreaterThan(Date.now());
 
     const user = await getSessionUser(localDb, token);
-    expect(user).toEqual({ id: admin.id, username: 'admin', role: 'admin' });
+    expect(user).toEqual({ id: admin.id, username: 'admin', displayName: null, role: 'admin' });
     expect(await getSessionUser(localDb, undefined)).toBeNull();
     expect(await getSessionUser(localDb, 'nonexistent')).toBeNull();
 
@@ -141,9 +142,30 @@ describe('RBAC helpers and auth API routes', () => {
     await expect(requireAuth()).resolves.toEqual({
       id: viewer.id,
       username: 'viewer',
+      displayName: null,
+      role: 'viewer',
+    });
+    await expect(requireStaff()).resolves.toEqual({
+      id: viewer.id,
+      username: 'viewer',
+      displayName: null,
       role: 'viewer',
     });
     await expect(requireAdmin()).rejects.toSatisfy(
+      (err: unknown) => err instanceof AuthError && err.status === 403,
+    );
+
+    const [owner] = await mockState.db!.select().from(users).where(eq(users.username, 'owner'));
+    const ownerSession = await createSession(mockState.db!, owner.id);
+    mockState.cookieJar.set(SESSION_COOKIE_NAME, ownerSession.token);
+
+    await expect(requireAuth()).resolves.toEqual({
+      id: owner.id,
+      username: 'owner',
+      displayName: 'Сергей Волков',
+      role: 'owner',
+    });
+    await expect(requireStaff()).rejects.toSatisfy(
       (err: unknown) => err instanceof AuthError && err.status === 403,
     );
 
@@ -154,6 +176,7 @@ describe('RBAC helpers and auth API routes', () => {
     await expect(requireAdmin()).resolves.toEqual({
       id: admin.id,
       username: 'admin',
+      displayName: null,
       role: 'admin',
     });
   });

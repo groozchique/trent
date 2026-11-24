@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { sessions, users, type UserRole } from '@/db/schema';
+import { cars, sessions, users, type UserRole } from '@/db/schema';
 import { hashPassword } from '@/lib/auth/password';
 import { requireAdmin } from '@/lib/auth/session';
 import {
@@ -40,9 +40,12 @@ export async function PATCH(request: Request, context: RouteIdContext) {
         }
       }
 
-      const updates: { role?: UserRole; passwordHash?: string } = {};
+      const updates: { role?: UserRole; passwordHash?: string; displayName?: string | null } = {};
       if (data.role !== undefined) {
         updates.role = data.role;
+      }
+      if (data.displayName !== undefined) {
+        updates.displayName = data.displayName;
       }
       if (data.password !== undefined) {
         updates.passwordHash = hashPassword(data.password);
@@ -54,6 +57,10 @@ export async function PATCH(request: Request, context: RouteIdContext) {
         .where(eq(users.id, targetId))
         .returning(SAFE_USER_COLUMNS)
         .get();
+
+      if (target.role === 'owner' && data.role !== undefined && data.role !== 'owner') {
+        tx.update(cars).set({ ownerId: null }).where(eq(cars.ownerId, targetId)).run();
+      }
 
       const roleChanged = data.role !== undefined && data.role !== target.role;
       if (data.password !== undefined || roleChanged) {

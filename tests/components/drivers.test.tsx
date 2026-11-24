@@ -231,6 +231,14 @@ describe('DriversPage SSR guard', () => {
 
     expect(screen.getByRole('button', { name: 'Добавить водителя' })).toBeInTheDocument();
   });
+
+  it('redirects owner role to /', async () => {
+    getCurrentUserMock.mockResolvedValue({ id: 3, username: 'owner', role: 'owner' });
+
+    await expect(DriversPage()).rejects.toThrow('NEXT_REDIRECT:/');
+    expect(redirectMock).toHaveBeenCalledWith('/');
+    expect(listDriverSummariesMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('DriversClient', () => {

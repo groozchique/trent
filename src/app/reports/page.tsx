@@ -15,6 +15,9 @@ export default async function ReportsPage() {
   if (!user) {
     redirect('/login');
   }
+  if (user.role === 'owner') {
+    redirect('/');
+  }
 
   const todayIso = getTodayIso();
   const weekRange = getIsoWeekRange(todayIso);

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { drivers, rentals } from '@/db/schema';
-import { requireAdmin, requireAuth } from '@/lib/auth/session';
+import { requireAdmin, requireStaff } from '@/lib/auth/session';
 import {
   ApiError,
   handleApiError,
@@ -19,7 +19,7 @@ async function parseDriverIdParam(context: RouteIdContext): Promise<number> {
 
 export async function GET(_request: Request, context: RouteIdContext) {
   try {
-    await requireAuth();
+    await requireStaff();
     const driverId = await parseDriverIdParam(context);
     const driver = await getDriverDetail(db, driverId);
     if (!driver) {

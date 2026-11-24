@@ -285,4 +285,20 @@ describe('TopBar', () => {
     expect(roleLabel).toHaveClass('hidden', 'md:inline');
     expect(roleLabel).not.toHaveClass('sm:inline');
   });
+
+  it('renders only Автопарк nav link, displayName in user badge, and Собственник pill for owner role', () => {
+    render(
+      <TopBar
+        user={{ id: 3, username: 'owner1', displayName: 'Сергей Волков', role: 'owner' }}
+      />,
+    );
+
+    const navLinks = within(screen.getByRole('navigation', { name: 'Основная навигация' }))
+      .getAllByRole('link')
+      .map((link) => link.textContent);
+    expect(navLinks).toEqual(['Автопарк']);
+    expect(screen.getByText('Сергей Волков')).toBeInTheDocument();
+    expect(screen.queryByText('owner1')).not.toBeInTheDocument();
+    expect(screen.getByText('Собственник')).toBeInTheDocument();
+  });
 });

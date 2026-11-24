@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import type { AppDb } from '@/db';
 import {
@@ -12,6 +12,7 @@ import {
   maintenanceRecords,
   rentalPayments,
   rentals,
+  users,
   type CarDocumentRow,
   type CarDocumentType,
   type CarRow,
@@ -25,6 +26,7 @@ import {
 } from '@/lib/finances';
 import type { SQLiteTx } from '@/lib/fines/attribution';
 import { buildRentalTimeline } from '@/lib/rental/timeline';
+import { formatUserLabel } from '@/lib/users';
 import {
   ApiError,
   parsePositiveIntId,
@@ -220,11 +222,35 @@ export function buildEmptyCarSummary(car: CarRow): CarSummaryDto {
   };
 }
 
-async function queryCarSummaryInputs(database: AppDb, carId?: number) {
-  const carRows = await (carId !== undefined
-    ? database.select().from(cars).where(eq(cars.id, carId))
-    : database.select().from(cars)
-  ).orderBy(asc(cars.id));
+function resolveOwnerName(
+  ownerId: number | null,
+  ownerUsername: string | null,
+  ownerDisplayName: string | null,
+): string | null {
+  if (ownerId === null || !ownerUsername) return null;
+  return formatUserLabel({ username: ownerUsername, displayName: ownerDisplayName });
+}
+
+async function queryCarSummaryInputs(
+  database: AppDb,
+  options?: { carId?: number; ownerId?: number },
+) {
+  const conditions = [];
+  if (options?.carId !== undefined) conditions.push(eq(cars.id, options.carId));
+  if (options?.ownerId !== undefined) conditions.push(eq(cars.ownerId, options.ownerId));
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const isScoped = options?.carId !== undefined || options?.ownerId !== undefined;
+
+  const carBase = database
+    .select({
+      car: cars,
+      ownerUsername: users.username,
+      ownerDisplayName: users.displayName,
+    })
+    .from(cars)
+    .leftJoin(users, eq(cars.ownerId, users.id));
+
+  const carRows = await (whereClause ? carBase.where(whereClause) : carBase).orderBy(asc(cars.id));
 
   if (carRows.length === 0) {
     return {
@@ -236,6 +262,8 @@ async function queryCarSummaryInputs(database: AppDb, carId?: number) {
     };
   }
 
+  const carIds = carRows.map((row) => row.car.id);
+
   const rentalBase = database
     .select({
       rental: rentals,
@@ -244,33 +272,32 @@ async function queryCarSummaryInputs(database: AppDb, carId?: number) {
     .from(rentals)
     .leftJoin(drivers, eq(rentals.driverId, drivers.id));
 
-  const rentalRows = await (carId !== undefined
-    ? rentalBase.where(eq(rentals.carId, carId))
+  const rentalRows = await (isScoped
+    ? rentalBase.where(inArray(rentals.carId, carIds))
     : rentalBase
   ).orderBy(desc(rentals.startDate), desc(rentals.id));
 
   const rentalIds = rentalRows.map((row) => row.rental.id);
-  const paymentRows =
-    carId !== undefined
-      ? rentalIds.length > 0
-        ? await database
-            .select({
-              rentalId: rentalPayments.rentalId,
-              dueDate: rentalPayments.dueDate,
-              amount: rentalPayments.amount,
-              paidAt: rentalPayments.paidAt,
-            })
-            .from(rentalPayments)
-            .where(inArray(rentalPayments.rentalId, rentalIds))
-        : []
-      : await database
+  const paymentRows = isScoped
+    ? rentalIds.length > 0
+      ? await database
           .select({
             rentalId: rentalPayments.rentalId,
             dueDate: rentalPayments.dueDate,
             amount: rentalPayments.amount,
             paidAt: rentalPayments.paidAt,
           })
-          .from(rentalPayments);
+          .from(rentalPayments)
+          .where(inArray(rentalPayments.rentalId, rentalIds))
+      : []
+    : await database
+        .select({
+          rentalId: rentalPayments.rentalId,
+          dueDate: rentalPayments.dueDate,
+          amount: rentalPayments.amount,
+          paidAt: rentalPayments.paidAt,
+        })
+        .from(rentalPayments);
 
   const fineBase = database
     .select({
@@ -279,7 +306,7 @@ async function queryCarSummaryInputs(database: AppDb, carId?: number) {
       status: fines.status,
     })
     .from(fines);
-  const fineRows = await (carId !== undefined ? fineBase.where(eq(fines.carId, carId)) : fineBase);
+  const fineRows = await (isScoped ? fineBase.where(inArray(fines.carId, carIds)) : fineBase);
 
   const docBase = database
     .select({
@@ -288,8 +315,8 @@ async function queryCarSummaryInputs(database: AppDb, carId?: number) {
       expiresAt: carDocuments.expiresAt,
     })
     .from(carDocuments);
-  const docRows = await (carId !== undefined
-    ? docBase.where(eq(carDocuments.carId, carId))
+  const docRows = await (isScoped
+    ? docBase.where(inArray(carDocuments.carId, carIds))
     : docBase);
 
   return { carRows, rentalRows, paymentRows, fineRows, docRows };
@@ -327,7 +354,7 @@ function buildCarSummaries(
     else docsByCar.set(doc.carId, [doc]);
   }
 
-  return inputs.carRows.map((car) => {
+  return inputs.carRows.map(({ car, ownerUsername, ownerDisplayName }) => {
     const carRentals = rentalsByCar.get(car.id) ?? [];
     const activeRental = carRentals.find((r) => r.rental.active);
     const fineStats = unpaidFinesByCar.get(car.id);
@@ -344,7 +371,7 @@ function buildCarSummaries(
       nextServiceMileage: car.nextServiceMileage,
       nextServiceDate: car.nextServiceDate,
       ownerId: car.ownerId ?? null,
-      ownerName: null,
+      ownerName: resolveOwnerName(car.ownerId ?? null, ownerUsername, ownerDisplayName),
       unpaidFinesCount: fineStats?.count ?? 0,
       unpaidFinesSum: fineStats?.sum ?? 0,
       rentDebt30d: computeRentDebt30d(
@@ -362,20 +389,34 @@ function buildCarSummaries(
   });
 }
 
-/** Return all fleet cars with v2 summary metrics and 30-day fleet KPI totals. */
+/** Return fleet cars (optionally scoped by ownerId) with v2 summary metrics and 30-day KPI totals. */
 export async function listCarSummariesWithSummary(
   database: AppDb,
   todayIso = getTodayIso(),
+  options?: { ownerId?: number },
 ): Promise<{ cars: CarSummaryDto[]; summary: FleetDashboardSummary }> {
-  const [inputs, maintRows] = await Promise.all([
-    queryCarSummaryInputs(database),
-    database
-      .select({
-        performedAt: maintenanceRecords.performedAt,
-        totalCost: maintenanceRecords.totalCost,
-      })
-      .from(maintenanceRecords),
-  ]);
+  const inputs = await queryCarSummaryInputs(
+    database,
+    options?.ownerId !== undefined ? { ownerId: options.ownerId } : undefined,
+  );
+  const carIds = inputs.carRows.map((row) => row.car.id);
+  const maintRows =
+    options?.ownerId !== undefined
+      ? carIds.length === 0
+        ? []
+        : await database
+            .select({
+              performedAt: maintenanceRecords.performedAt,
+              totalCost: maintenanceRecords.totalCost,
+            })
+            .from(maintenanceRecords)
+            .where(inArray(maintenanceRecords.carId, carIds))
+      : await database
+          .select({
+            performedAt: maintenanceRecords.performedAt,
+            totalCost: maintenanceRecords.totalCost,
+          })
+          .from(maintenanceRecords);
 
   const carSummaries = buildCarSummaries(inputs, todayIso);
   const summary = computeFleetFinancialSummary(
@@ -417,7 +458,7 @@ export async function getCarSummary(
   carId: number,
   todayIso = getTodayIso(),
 ): Promise<CarSummaryDto | null> {
-  const inputs = await queryCarSummaryInputs(database, carId);
+  const inputs = await queryCarSummaryInputs(database, { carId });
   const [row] = buildCarSummaries(inputs, todayIso);
   return row ?? null;
 }
@@ -428,8 +469,18 @@ export async function getCarDetail(
   carId: number,
   todayIso = getTodayIso(),
 ): Promise<CarDetailDto | null> {
-  const [car] = await database.select().from(cars).where(eq(cars.id, carId)).limit(1);
-  if (!car) return null;
+  const [carRow] = await database
+    .select({
+      car: cars,
+      ownerUsername: users.username,
+      ownerDisplayName: users.displayName,
+    })
+    .from(cars)
+    .leftJoin(users, eq(cars.ownerId, users.id))
+    .where(eq(cars.id, carId))
+    .limit(1);
+  if (!carRow) return null;
+  const { car, ownerUsername, ownerDisplayName } = carRow;
 
   const [fineRows, rentalRows, docRows, maintRows] = await Promise.all([
     database
@@ -573,7 +624,7 @@ export async function getCarDetail(
     nextServiceMileage: car.nextServiceMileage,
     nextServiceDate: car.nextServiceDate,
     ownerId: car.ownerId ?? null,
-    ownerName: null,
+    ownerName: resolveOwnerName(car.ownerId ?? null, ownerUsername, ownerDisplayName),
     unpaidFinesCount,
     unpaidFinesSum,
     rentDebt30d,

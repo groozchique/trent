@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { drivers } from '@/db/schema';
-import { requireAdmin, requireAuth } from '@/lib/auth/session';
+import { requireAdmin, requireStaff } from '@/lib/auth/session';
 import { handleApiError } from '@/lib/cars';
 import { buildEmptyDriverSummary, listDriverSummaries } from '@/lib/drivers';
 import { createDriverSchema, parseJsonBody } from '@/lib/validation';
 
 export async function GET() {
   try {
-    await requireAuth();
+    await requireStaff();
     const list = await listDriverSummaries(db);
     return NextResponse.json({ drivers: list });
   } catch (err) {

@@ -11,6 +11,7 @@ const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 export type SessionUser = {
   id: number;
   username: string;
+  displayName?: string | null;
   role: UserRole;
 };
 
@@ -57,6 +58,7 @@ export async function getSessionUser(
     .select({
       id: users.id,
       username: users.username,
+      displayName: users.displayName,
       role: users.role,
       expiresAt: sessions.expiresAt,
     })
@@ -71,7 +73,12 @@ export async function getSessionUser(
     return null;
   }
 
-  return { id: row.id, username: row.username, role: row.role };
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.displayName,
+    role: row.role,
+  };
 }
 
 /** Revoke a session token from the database. */
@@ -98,5 +105,12 @@ export async function requireAuth(): Promise<SessionUser> {
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireAuth();
   if (user.role !== 'admin') throw new AuthError(403);
+  return user;
+}
+
+/** Ensure request belongs to a staff user (`admin` or `viewer`), rejecting `owner` with 403. */
+export async function requireStaff(): Promise<SessionUser> {
+  const user = await requireAuth();
+  if (user.role === 'owner') throw new AuthError(403);
   return user;
 }

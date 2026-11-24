@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       .insert(users)
       .values({
         username: data.username,
+        displayName: data.displayName ?? null,
         passwordHash,
         role: data.role,
       })

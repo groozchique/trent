@@ -50,6 +50,7 @@ export async function POST(request: Request) {
   const user: SessionUser = {
     id: userRow.id,
     username: userRow.username,
+    displayName: userRow.displayName,
     role: userRow.role,
   };
 

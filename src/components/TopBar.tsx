@@ -21,32 +21,40 @@ export function TopBar({ user }: { user: SessionUser | null }) {
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const navItems = user
-    ? [
-        {
-          href: '/',
-          label: 'Автопарк',
-          isActive: pathname === '/' || pathname.startsWith('/cars'),
-        },
-        {
-          href: '/drivers',
-          label: 'Водители',
-          isActive: pathname === '/drivers' || pathname.startsWith('/drivers/'),
-        },
-        {
-          href: '/reports',
-          label: 'Отчёты',
-          isActive: pathname === '/reports' || pathname.startsWith('/reports/'),
-        },
-        ...(user.role === 'admin'
-          ? [
-              {
-                href: '/users',
-                label: 'Пользователи',
-                isActive: pathname === '/users' || pathname.startsWith('/users/'),
-              },
-            ]
-          : []),
-      ]
+    ? user.role === 'owner'
+      ? [
+          {
+            href: '/',
+            label: 'Автопарк',
+            isActive: pathname === '/' || pathname.startsWith('/cars'),
+          },
+        ]
+      : [
+          {
+            href: '/',
+            label: 'Автопарк',
+            isActive: pathname === '/' || pathname.startsWith('/cars'),
+          },
+          {
+            href: '/drivers',
+            label: 'Водители',
+            isActive: pathname === '/drivers' || pathname.startsWith('/drivers/'),
+          },
+          {
+            href: '/reports',
+            label: 'Отчёты',
+            isActive: pathname === '/reports' || pathname.startsWith('/reports/'),
+          },
+          ...(user.role === 'admin'
+            ? [
+                {
+                  href: '/users',
+                  label: 'Пользователи',
+                  isActive: pathname === '/users' || pathname.startsWith('/users/'),
+                },
+              ]
+            : []),
+        ]
     : [];
 
   async function handleLogout() {
@@ -117,7 +125,7 @@ export function TopBar({ user }: { user: SessionUser | null }) {
             <>
               <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1 text-xs sm:px-2.5">
                 <span className="max-w-[68px] truncate font-medium text-[var(--text-primary)] sm:max-w-[160px]">
-                  {user.username}
+                  {user.displayName?.trim() || user.username}
                 </span>
                 <span className="hidden rounded bg-[var(--bg-surface)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-secondary)] md:inline">
                   {ROLE_LABELS[user.role]}
