@@ -1201,6 +1201,7 @@ function RentalTab({
   }
 
   async function handleSaveOwner() {
+    if (savingOwner) return;
     setOwnerFeedback(null);
     const nextOwnerId = parseOptionalNumber(selectedOwnerId);
 
@@ -1247,51 +1248,6 @@ function RentalTab({
 
   return (
     <div className="space-y-6">
-      <section
-        aria-label="Собственник"
-        className="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4"
-      >
-        <h2 className="text-base font-semibold text-[var(--text-primary)]">
-          Собственник
-        </h2>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <label htmlFor="rental-owner" className={LABEL_CLASS}>
-              Собственник автомобиля
-            </label>
-            <select
-              id="rental-owner"
-              name="ownerId"
-              value={selectedOwnerId}
-              onChange={(event) => setSelectedOwnerId(event.target.value)}
-              disabled={busy}
-              className={INPUT_CLASS}
-            >
-              <option value="">Не указан</option>
-              {ownerOptions.map((option) => (
-                <option key={option.id} value={String(option.id)}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              void handleSaveOwner();
-            }}
-            className={`${PRIMARY_BTN_CLASS} shrink-0`}
-          >
-            {savingOwner ? 'Сохранение...' : 'Сохранить собственника'}
-          </button>
-        </div>
-
-        <FeedbackBanner feedback={ownerFeedback} />
-      </section>
-
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <h2 className="text-base font-semibold text-[var(--text-primary)]">
           Условия аренды
@@ -1503,6 +1459,56 @@ function RentalTab({
           </button>
         </div>
       </form>
+
+      <section
+        aria-label="Собственник"
+        className="space-y-3 border-t border-[var(--border-subtle)] pt-5"
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+            Собственник
+          </h3>
+          <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+            Привязывается независимо от аренды, используется в кабинете собственника и отчётах.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="w-full sm:max-w-xs">
+            <label htmlFor="rental-owner" className={LABEL_CLASS}>
+              Собственник автомобиля
+            </label>
+            <select
+              id="rental-owner"
+              name="ownerId"
+              value={selectedOwnerId}
+              onChange={(event) => setSelectedOwnerId(event.target.value)}
+              disabled={busy}
+              className={INPUT_CLASS}
+            >
+              <option value="">Не указан</option>
+              {ownerOptions.map((option) => (
+                <option key={option.id} value={String(option.id)}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              void handleSaveOwner();
+            }}
+            className={`${SECONDARY_BTN_CLASS} w-full shrink-0 sm:w-auto`}
+          >
+            {savingOwner ? 'Сохранение...' : 'Сохранить собственника'}
+          </button>
+        </div>
+
+        <FeedbackBanner feedback={ownerFeedback} />
+      </section>
 
       {car.rental && car.rental.active && (
         <section

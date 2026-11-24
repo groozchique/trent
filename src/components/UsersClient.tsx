@@ -50,7 +50,7 @@ const INPUT_CLASS =
 const LABEL_CLASS = 'mb-1.5 block text-xs font-medium text-[var(--text-secondary)]';
 
 const SECONDARY_BTN_CLASS =
-  'inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm';
+  'inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium whitespace-nowrap text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm';
 
 type FeedbackState = { kind: 'error' | 'success'; message: string } | null;
 
@@ -499,23 +499,40 @@ export function UsersClient({
                 data-testid={`user-row-${item.id}`}
                 className="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      {item.displayName ? (
-                        <>
-                          <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                            {item.displayName}
-                          </span>
-                          <span className="truncate text-xs text-[var(--text-muted)]">
-                            Логин: {item.username}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                          {item.username}
-                        </span>
-                      )}
+                      <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                        {item.displayName || item.username}
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={rowBusy}
+                        aria-label="Изменить имя"
+                        title="Изменить имя"
+                        aria-expanded={isEditNameOpen}
+                        onClick={() => {
+                          setListFeedback(null);
+                          setConfirmDeleteUserId(null);
+                          setResetPasswordUserId(null);
+                          setResetPasswordValue('');
+                          if (isEditNameOpen) {
+                            setEditNameUserId(null);
+                            setEditNameValue('');
+                          } else {
+                            setEditNameUserId(item.id);
+                            setEditNameValue(item.displayName ?? '');
+                          }
+                        }}
+                        className={`inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          isEditNameOpen
+                            ? 'border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-primary)]'
+                            : 'border-transparent text-[var(--text-muted)] hover:border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      </button>
 
                       {isSelf && (
                         <span className="inline-flex items-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-0.5 text-xs font-medium text-[var(--text-primary)]">
@@ -532,12 +549,13 @@ export function UsersClient({
                     </div>
 
                     <p className="text-xs text-[var(--text-secondary)] tabular-nums">
-                      Создан {formatDateRu(item.createdAt)}
+                      {item.displayName ? `Логин: ${item.username}, создан ` : 'Создан '}
+                      {formatDateRu(item.createdAt)}
                       {isSoleAdmin ? ', единственный администратор' : ''}
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:flex-nowrap">
                     <select
                       aria-label={`Роль пользователя ${item.username}`}
                       value={item.role}
@@ -545,7 +563,7 @@ export function UsersClient({
                       onChange={(event) => {
                         void handleRoleChange(item, event.target.value as UserRole);
                       }}
-                      className="h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--border-strong)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                      className="h-9 shrink-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--border-strong)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
                     >
                       {ROLE_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -553,28 +571,6 @@ export function UsersClient({
                         </option>
                       ))}
                     </select>
-
-                    <button
-                      type="button"
-                      disabled={rowBusy}
-                      onClick={() => {
-                        setListFeedback(null);
-                        setConfirmDeleteUserId(null);
-                        setResetPasswordUserId(null);
-                        setResetPasswordValue('');
-                        if (isEditNameOpen) {
-                          setEditNameUserId(null);
-                          setEditNameValue('');
-                        } else {
-                          setEditNameUserId(item.id);
-                          setEditNameValue(item.displayName ?? '');
-                        }
-                      }}
-                      className={SECONDARY_BTN_CLASS}
-                    >
-                      <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span>Изменить имя</span>
-                    </button>
 
                     <button
                       type="button"
@@ -609,7 +605,7 @@ export function UsersClient({
                         borderColor: 'var(--status-repair-border)',
                         color: 'var(--status-repair-text)',
                       }}
-                      className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
+                      className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 sm:text-sm"
                     >
                       <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span>Удалить</span>
