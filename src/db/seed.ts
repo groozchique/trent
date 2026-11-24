@@ -27,8 +27,21 @@ export async function seedDatabase(database: AppDb): Promise<void> {
     .values([
       { username: 'admin', passwordHash: hashPassword('admin123'), role: 'admin' },
       { username: 'viewer', passwordHash: hashPassword('viewer123'), role: 'viewer' },
+      {
+        username: 'owner',
+        displayName: 'Сергей Волков',
+        passwordHash: hashPassword('owner123'),
+        role: 'owner',
+      },
     ])
     .onConflictDoNothing({ target: users.username });
+
+  const [ownerUser] = await database
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, 'owner'))
+    .limit(1);
+  const defaultOwnerId = ownerUser?.id ?? null;
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const baseUtcMs = Date.parse(`${todayStr}T00:00:00Z`);
@@ -43,6 +56,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
       stsNumber: '99 01 112233',
       nextServiceMileage: 150000,
       nextServiceDate: isoDateOffset(baseUtcMs, 45),
+      ownerId: defaultOwnerId,
     },
     {
       plate: 'В456ОР 777',
@@ -53,6 +67,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
       stsNumber: '77 44 556677',
       nextServiceMileage: 99000,
       nextServiceDate: isoDateOffset(baseUtcMs, 10),
+      ownerId: defaultOwnerId,
     },
     {
       plate: 'Е789КХ 799',
@@ -63,6 +78,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
       stsNumber: '99 02 889900',
       nextServiceMileage: 215000,
       nextServiceDate: isoDateOffset(baseUtcMs, -3),
+      ownerId: null,
     },
     {
       plate: 'М321ТН 777',
@@ -73,6 +89,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
       stsNumber: null,
       nextServiceMileage: 42500,
       nextServiceDate: isoDateOffset(baseUtcMs, 60),
+      ownerId: null,
     },
   ];
 

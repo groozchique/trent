@@ -34,6 +34,8 @@ export type CarSummaryDto = {
   stsNumber: string | null;
   nextServiceMileage: number | null;
   nextServiceDate: string | null;
+  ownerId: number | null;
+  ownerName: string | null;
   unpaidFinesCount: number;
   unpaidFinesSum: number;
   rentDebt30d: number;
@@ -196,8 +198,16 @@ export type DriverDetailDto = DriverSummaryDto & {
 export type SafeUserDto = {
   id: number;
   username: string;
+  displayName: string | null;
   role: UserRole;
   createdAt: string;
+};
+
+export type OwnerOptionDto = {
+  id: number;
+  username: string;
+  displayName: string | null;
+  label: string;
 };
 
 export type ReportPeriodType = 'weekly' | 'monthly';
@@ -305,7 +315,10 @@ const carStatusSchema = z.enum(
 
 const fineStatusSchema = z.enum(['unpaid', 'paid'], 'Выберите корректный статус штрафа');
 
-const userRoleSchema = z.enum(['admin', 'viewer'], 'Выберите корректную роль пользователя');
+const userRoleSchema = z.enum(
+  ['admin', 'viewer', 'owner'],
+  'Выберите корректную роль пользователя',
+);
 
 const mileageField = z
   .number('Укажите пробег')
@@ -347,6 +360,13 @@ export const updateCarSchema = z
       status: carStatusSchema.optional(),
       mileage: mileageField.optional(),
       stsNumber: stsNumberField,
+      ownerId: positiveIntField(
+        'Некорректный идентификатор собственника',
+        'Некорректный идентификатор собственника',
+        'Некорректный идентификатор собственника',
+      )
+        .nullable()
+        .optional(),
     },
     'Некорректные данные автомобиля',
   )
@@ -545,6 +565,7 @@ const passwordField = z
 export const createUserSchema = z.object(
   {
     username: usernameField,
+    displayName: optionalNullableString('Имя должно быть строкой'),
     password: passwordField,
     role: userRoleSchema,
   },
@@ -555,13 +576,14 @@ export const updateUserSchema = z
   .object(
     {
       role: userRoleSchema.optional(),
+      displayName: patchNullableString('Имя должно быть строкой'),
       password: passwordField.optional(),
     },
     'Некорректные данные пользователя',
   )
   .refine(
-    (data) => data.role !== undefined || data.password !== undefined,
-    'Укажите новую роль или новый пароль',
+    (data) => data.role !== undefined || data.password !== undefined || data.displayName !== undefined,
+    'Укажите имя, новую роль или новый пароль',
   );
 
 const maintenancePartInputSchema = z.object(

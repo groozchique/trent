@@ -11,6 +11,7 @@ const INIT_SQL = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   username TEXT NOT NULL,
+  display_name TEXT,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL,
   created_at TEXT NOT NULL
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS cars (
   sts_number TEXT,
   next_service_mileage INTEGER,
   next_service_date TEXT,
+  owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS cars_plate_unique ON cars (plate);
@@ -123,6 +125,12 @@ const FINE_V2_COLUMNS: ColumnSpec[] = [
 ];
 const RENTAL_V3_COLUMNS: ColumnSpec[] = [
   { name: 'manager_commission_percent', definition: 'REAL NOT NULL DEFAULT 0' },
+];
+const USER_V4_COLUMNS: ColumnSpec[] = [
+  { name: 'display_name', definition: 'TEXT' },
+];
+const CAR_V4_COLUMNS: ColumnSpec[] = [
+  { name: 'owner_id', definition: 'INTEGER REFERENCES users(id) ON DELETE SET NULL' },
 ];
 
 function getMissingColumns(
@@ -296,7 +304,23 @@ export function migrateDbV3(sqlite: Database.Database): void {
     .immediate();
 }
 
-/** Create a Drizzle SQLite instance with foreign keys enabled and schema migrated to v3. */
+const V4_SCHEMA_VERSION = 4;
+
+/** Idempotently upgrade a v3 SQLite database to the v4 schema. */
+export function migrateDbV4(sqlite: Database.Database): void {
+  if (getUserVersion(sqlite) >= V4_SCHEMA_VERSION) return;
+
+  sqlite
+    .transaction(() => {
+      if (getUserVersion(sqlite) >= V4_SCHEMA_VERSION) return;
+      ensureColumns(sqlite, 'users', USER_V4_COLUMNS);
+      ensureColumns(sqlite, 'cars', CAR_V4_COLUMNS);
+      sqlite.pragma(`user_version = ${V4_SCHEMA_VERSION}`);
+    })
+    .immediate();
+}
+
+/** Create a Drizzle SQLite instance with foreign keys enabled and schema migrated to v4. */
 export function createDb(filePath?: string): AppDb {
   const target = filePath ?? process.env.DATABASE_URL ?? './data/taxi.db';
   if (target !== ':memory:' && !target.startsWith('file::memory:')) {
@@ -312,6 +336,7 @@ export function createDb(filePath?: string): AppDb {
   sqlite.exec(INIT_SQL);
   migrateDbV2(sqlite);
   migrateDbV3(sqlite);
+  migrateDbV4(sqlite);
 
   return drizzle(sqlite, { schema });
 }

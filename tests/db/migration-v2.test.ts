@@ -295,7 +295,7 @@ describe('v1 -> v2 idempotent database migration', () => {
       ).toThrow(/UNIQUE/);
 
       const userVersion = db2.get<{ user_version: number }>(sql`PRAGMA user_version`);
-      expect(userVersion?.user_version).toBe(3);
+      expect(userVersion?.user_version).toBe(4);
     } finally {
       closeAppDb(db2);
     }
@@ -363,7 +363,7 @@ describe('v1 -> v2 idempotent database migration', () => {
       expect(rentalAfter?.driverId).toBeNull();
       expect(rentalAfter?.renterName).toBe('Сидоров Иван');
       expect(fineAfter?.driverId).toBeNull();
-      expect(db2.get<{ user_version: number }>(sql`PRAGMA user_version`)?.user_version).toBe(3);
+      expect(db2.get<{ user_version: number }>(sql`PRAGMA user_version`)?.user_version).toBe(4);
     } finally {
       closeAppDb(db2);
     }
@@ -563,7 +563,7 @@ describe('v1 -> v2 idempotent database migration', () => {
     const db1 = createDb(dbPath);
     try {
       const userVersion = db1.get<{ user_version: number }>(sql`PRAGMA user_version`);
-      expect(userVersion?.user_version).toBe(3);
+      expect(userVersion?.user_version).toBe(4);
 
       const cols = db1.all<{ name: string }>(sql`PRAGMA table_info('rentals')`);
       expect(cols.map((c) => c.name)).toContain('manager_commission_percent');
@@ -584,7 +584,7 @@ describe('v1 -> v2 idempotent database migration', () => {
     const db2 = createDb(dbPath);
     try {
       const userVersion = db2.get<{ user_version: number }>(sql`PRAGMA user_version`);
-      expect(userVersion?.user_version).toBe(3);
+      expect(userVersion?.user_version).toBe(4);
       const [rental] = db2.select().from(rentals).all();
       expect(rental?.managerCommissionPercent).toBe(0);
     } finally {

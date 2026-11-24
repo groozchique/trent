@@ -10,6 +10,7 @@ import { ThemeToggle } from './ThemeToggle';
 const ROLE_LABELS: Record<SessionUser['role'], string> = {
   admin: 'Администратор',
   viewer: 'Просмотр',
+  owner: 'Собственник',
 };
 
 /** Persistent top navigation bar with role-aware route links, user badge, logout, and theme toggle. */

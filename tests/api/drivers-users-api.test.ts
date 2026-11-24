@@ -598,7 +598,7 @@ describe('Drivers & Admin Users libraries and API routes', () => {
       expect(body.error).not.toMatch(/invalid input|expected/i);
     }
 
-    for (const payload of [null, {}, { password: '123' }, { role: 'owner' }]) {
+    for (const payload of [null, {}, { password: '123' }, { role: 'superadmin' }]) {
       const res = await updateUserPatch(jsonReq('http://localhost/api/users/1', 'PATCH', payload), idCtx(viewer.id));
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error: string };
@@ -630,7 +630,7 @@ describe('Drivers & Admin Users libraries and API routes', () => {
 
     // listUsersSafe and GET /api/users omit passwordHash
     const safeDirect = await listUsersSafe(db);
-    expect(safeDirect).toHaveLength(2);
+    expect(safeDirect).toHaveLength(3);
     for (const u of safeDirect) {
       expect('passwordHash' in u).toBe(false);
     }
@@ -638,7 +638,7 @@ describe('Drivers & Admin Users libraries and API routes', () => {
     const listRes1 = await listUsersGet();
     expect(listRes1.status).toBe(200);
     const listBody1 = (await listRes1.json()) as { users: Array<Record<string, unknown>> };
-    expect(listBody1.users).toHaveLength(2);
+    expect(listBody1.users).toHaveLength(3);
     for (const u of listBody1.users) {
       expect('passwordHash' in u).toBe(false);
     }

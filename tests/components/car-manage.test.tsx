@@ -92,6 +92,8 @@ const SAMPLE_CAR: CarDetailDto = {
   stsNumber: null,
   nextServiceMileage: null,
   nextServiceDate: null,
+  ownerId: null,
+  ownerName: null,
   unpaidFinesCount: 1,
   unpaidFinesSum: 750,
   rentDebt30d: 0,

@@ -231,6 +231,8 @@ describe('30-day finances engine', () => {
         stsNumber: null,
         nextServiceMileage: null,
         nextServiceDate: null,
+        ownerId: null,
+        ownerName: null,
         unpaidFinesCount: 1,
         unpaidFinesSum: 1500,
         rentDebt30d: 2200,
@@ -249,6 +251,8 @@ describe('30-day finances engine', () => {
         stsNumber: null,
         nextServiceMileage: null,
         nextServiceDate: null,
+        ownerId: null,
+        ownerName: null,
         unpaidFinesCount: 1,
         unpaidFinesSum: 3000,
         rentDebt30d: 3000,
@@ -478,7 +482,7 @@ describe('v2 validation schemas and Russian error messages', () => {
       createUserSchema.safeParse({ username: 'bad name', password: 'secret', role: 'viewer' }),
       createUserSchema.safeParse({ username: 'valid_user', password: '123', role: 'viewer' }),
       createUserSchema.safeParse({ username: 'valid_user', password: 123456, role: 'viewer' }),
-      createUserSchema.safeParse({ username: 'valid_user', password: 'secret', role: 'owner' }),
+      createUserSchema.safeParse({ username: 'valid_user', password: 'secret', role: 'superadmin' }),
       updateUserSchema.safeParse(null),
       updateUserSchema.safeParse({}),
       updateUserSchema.safeParse({ role: 'root' }),
@@ -528,6 +532,7 @@ describe('v2 validation schemas and Russian error messages', () => {
     expect(updateDriverSchema.parse({ archived: true })).toEqual({ archived: true });
     expect(createUserSchema.parse({ username: ' manager1 ', password: 'secret', role: 'viewer' })).toEqual({
       username: 'manager1',
+      displayName: null,
       password: 'secret',
       role: 'viewer',
     });

@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-export type UserRole = 'admin' | 'viewer';
+export type UserRole = 'admin' | 'viewer' | 'owner';
 export type CarStatus = 'in_rent' | 'in_repair' | 'available';
 export type RentalPeriodicity = 'daily' | 'weekly' | 'monthly';
 export type FineStatus = 'unpaid' | 'paid';
@@ -12,8 +12,9 @@ export type CarDocumentType = (typeof CAR_DOCUMENT_TYPES)[number];
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   username: text('username').notNull().unique(),
+  displayName: text('display_name'),
   passwordHash: text('password_hash').notNull(),
-  role: text('role', { enum: ['admin', 'viewer'] }).$type<UserRole>().notNull(),
+  role: text('role', { enum: ['admin', 'viewer', 'owner'] }).$type<UserRole>().notNull(),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 
@@ -46,6 +47,7 @@ export const cars = sqliteTable('cars', {
   stsNumber: text('sts_number'),
   nextServiceMileage: integer('next_service_mileage'),
   nextServiceDate: text('next_service_date'),
+  ownerId: integer('owner_id').references(() => users.id, { onDelete: 'set null' }),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 

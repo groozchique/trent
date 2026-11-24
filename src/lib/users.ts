@@ -7,6 +7,7 @@ import type { SafeUserDto } from '@/lib/validation';
 export const SAFE_USER_COLUMNS = {
   id: users.id,
   username: users.username,
+  displayName: users.displayName,
   role: users.role,
   createdAt: users.createdAt,
 };

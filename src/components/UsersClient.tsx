@@ -14,6 +14,7 @@ import {
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Администратор',
   viewer: 'Просмотр',
+  owner: 'Собственник',
 };
 
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string }> = [

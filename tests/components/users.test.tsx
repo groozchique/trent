@@ -38,12 +38,14 @@ const SAMPLE_USERS: SafeUserDto[] = [
   {
     id: 1,
     username: 'admin',
+    displayName: null,
     role: 'admin',
     createdAt: '2026-10-01T10:00:00Z',
   },
   {
     id: 2,
     username: 'viewer',
+    displayName: null,
     role: 'viewer',
     createdAt: '2026-10-05T12:00:00Z',
   },
@@ -106,6 +108,7 @@ describe('UsersClient', () => {
     const createdUser: SafeUserDto = {
       id: 3,
       username: 'operator',
+      displayName: null,
       role: 'viewer',
       createdAt: '2026-11-22T01:00:00Z',
     };
@@ -171,6 +174,7 @@ describe('UsersClient', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: 'operator',
+          displayName: null,
           password: 'secret123',
           role: 'viewer',
         }),
@@ -263,12 +267,14 @@ describe('UsersClient', () => {
       {
         id: 5,
         username: 'superadmin',
+        displayName: null,
         role: 'admin',
         createdAt: '2026-10-01T10:00:00Z',
       },
       {
         id: 6,
         username: 'operator',
+        displayName: null,
         role: 'viewer',
         createdAt: '2026-10-02T10:00:00Z',
       },

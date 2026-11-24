@@ -45,13 +45,17 @@ describe('database schema and seed', () => {
     const allMaint = await db.select().from(maintenanceRecords);
     const allParts = await db.select().from(maintenanceParts);
 
-    expect(allUsers.map((u) => u.username).sort()).toEqual(['admin', 'viewer']);
+    expect(allUsers.map((u) => u.username).sort()).toEqual(['admin', 'owner', 'viewer']);
     const admin = allUsers.find((u) => u.username === 'admin');
     const viewer = allUsers.find((u) => u.username === 'viewer');
+    const owner = allUsers.find((u) => u.username === 'owner');
     expect(admin?.role).toBe('admin');
     expect(viewer?.role).toBe('viewer');
+    expect(owner?.role).toBe('owner');
+    expect(owner?.displayName).toBe('Сергей Волков');
     expect(verifyScrypt('admin123', admin?.passwordHash ?? '')).toBe(true);
     expect(verifyScrypt('viewer123', viewer?.passwordHash ?? '')).toBe(true);
+    expect(verifyScrypt('owner123', owner?.passwordHash ?? '')).toBe(true);
 
     expect(allCars.length).toBeGreaterThanOrEqual(4);
     expect(new Set(allCars.map((c) => c.status))).toEqual(
@@ -66,6 +70,10 @@ describe('database schema and seed', () => {
     expect(hyundai?.stsNumber).toBe('77 44 556677');
     expect(skoda?.stsNumber).toBe('99 02 889900');
     expect(geely?.stsNumber).toBeNull();
+    expect(kia?.ownerId).toBe(owner?.id);
+    expect(hyundai?.ownerId).toBe(owner?.id);
+    expect(skoda?.ownerId).toBeNull();
+    expect(geely?.ownerId).toBeNull();
     expect(allCars.some((c) => c.nextServiceMileage !== null && c.nextServiceDate !== null)).toBe(true);
 
     expect(allDrivers).toHaveLength(3);
@@ -127,5 +135,17 @@ describe('database schema and seed', () => {
       .from(rentals)
       .where(eq(rentals.id, remainingRental!.id));
     expect(afterRental?.driverId).toBeNull();
+
+    // Deleting an owner sets cars.ownerId to null without deleting cars
+    const [ownerUser] = await db.select().from(users).where(eq(users.username, 'owner'));
+    expect(ownerUser).toBeDefined();
+    const [ownedCar] = await db.select().from(cars).where(eq(cars.ownerId, ownerUser!.id)).limit(1);
+    expect(ownedCar).toBeDefined();
+    await db.delete(users).where(eq(users.id, ownerUser!.id));
+    const [carAfterOwnerDelete] = await db
+      .select()
+      .from(cars)
+      .where(eq(cars.id, ownedCar!.id));
+    expect(carAfterOwnerDelete?.ownerId).toBeNull();
   });
 });
