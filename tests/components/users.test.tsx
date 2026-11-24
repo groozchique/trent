@@ -78,6 +78,14 @@ describe('UsersPage SSR guard', () => {
     expect(listUsersSafeMock).not.toHaveBeenCalled();
   });
 
+  it('redirects owner user to /', async () => {
+    getCurrentUserMock.mockResolvedValue({ id: 3, username: 'owner1', role: 'owner' });
+
+    await expect(UsersPage()).rejects.toThrow('NEXT_REDIRECT:/');
+    expect(redirectMock).toHaveBeenCalledWith('/');
+    expect(listUsersSafeMock).not.toHaveBeenCalled();
+  });
+
   it('renders UsersClient for admin', async () => {
     getCurrentUserMock.mockResolvedValue({ id: 1, username: 'admin', role: 'admin' });
     listUsersSafeMock.mockResolvedValue(SAMPLE_USERS);
@@ -320,5 +328,165 @@ describe('UsersClient', () => {
       expect(within(operatorRow).queryByLabelText('Новый пароль')).not.toBeInTheDocument();
     });
     expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('creates an owner user with displayName and updates subtitle owner count', async () => {
+    const createdOwner: SafeUserDto = {
+      id: 7,
+      username: 'owner1',
+      displayName: 'Сергей Волков',
+      role: 'owner',
+      createdAt: '2026-11-23T09:00:00Z',
+    };
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({ user: createdOwner }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<UsersClient initialUsers={SAMPLE_USERS} currentUserId={1} />);
+
+    const usernameInput = screen.getByLabelText('Логин');
+    const displayNameInput = screen.getByLabelText('Имя / ФИО (необязательно)');
+    const passwordInput = screen.getByLabelText('Пароль');
+    const roleSelect = screen.getByLabelText('Роль');
+    const submitBtn = screen.getByRole('button', { name: 'Создать пользователя' });
+
+    fireEvent.change(usernameInput, { target: { value: 'owner1' } });
+    fireEvent.change(displayNameInput, { target: { value: '  Сергей Волков  ' } });
+    fireEvent.change(passwordInput, { target: { value: 'secret123' } });
+    fireEvent.change(roleSelect, { target: { value: 'owner' } });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: 'owner1',
+          displayName: 'Сергей Волков',
+          password: 'secret123',
+          role: 'owner',
+        }),
+      });
+    });
+
+    const ownerRow = await screen.findByTestId('user-row-7');
+    expect(within(ownerRow).getByText('Сергей Волков')).toBeInTheDocument();
+    expect(within(ownerRow).getByText(/owner1/)).toBeInTheDocument();
+    expect(within(ownerRow).getByText('Собственник', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.getByText(/собственников:/i).textContent).toContain('собственников: 1');
+
+    expect(usernameInput).toHaveValue('');
+    expect(displayNameInput).toHaveValue('');
+    expect(passwordInput).toHaveValue('');
+    expect(roleSelect).toHaveValue('viewer');
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it('edits and clears user displayName inline via PATCH /api/users/:id', async () => {
+    const initialUsers: SafeUserDto[] = [
+      ...SAMPLE_USERS,
+      {
+        id: 8,
+        username: 'owner2',
+        displayName: 'Старое Имя',
+        role: 'owner',
+        createdAt: '2026-11-20T10:00:00Z',
+      },
+    ];
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: {
+            id: 8,
+            username: 'owner2',
+            displayName: 'Новое Имя',
+            role: 'owner',
+            createdAt: '2026-11-20T10:00:00Z',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: {
+            id: 8,
+            username: 'owner2',
+            displayName: null,
+            role: 'owner',
+            createdAt: '2026-11-20T10:00:00Z',
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<UsersClient initialUsers={initialUsers} currentUserId={1} />);
+
+    const ownerRow = screen.getByTestId('user-row-8');
+
+    // Open and cancel without fetching
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Изменить имя' }));
+    const editInput = within(ownerRow).getByLabelText('Имя / ФИО');
+    expect(editInput).toHaveValue('Старое Имя');
+
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Отмена' }));
+    expect(within(ownerRow).queryByLabelText('Имя / ФИО')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Reopen, switch to reset password (mutually exclusive), then back to edit name
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Изменить имя' }));
+    expect(within(ownerRow).getByLabelText('Имя / ФИО')).toBeInTheDocument();
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Сбросить пароль' }));
+    expect(within(ownerRow).queryByLabelText('Имя / ФИО')).not.toBeInTheDocument();
+    expect(within(ownerRow).getByLabelText('Новый пароль')).toBeInTheDocument();
+
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Изменить имя' }));
+    expect(within(ownerRow).queryByLabelText('Новый пароль')).not.toBeInTheDocument();
+
+    // Update displayName
+    fireEvent.change(within(ownerRow).getByLabelText('Имя / ФИО'), {
+      target: { value: '  Новое Имя  ' },
+    });
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Сохранить имя' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/users/8', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: 'Новое Имя' }),
+      });
+    });
+
+    expect(within(ownerRow).getByText('Новое Имя')).toBeInTheDocument();
+    expect(within(ownerRow).queryByLabelText('Имя / ФИО')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    // Clear displayName -> sends null
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Изменить имя' }));
+    const clearedInput = within(ownerRow).getByLabelText('Имя / ФИО');
+    expect(clearedInput).toHaveValue('Новое Имя');
+    fireEvent.change(clearedInput, { target: { value: '   ' } });
+    fireEvent.click(within(ownerRow).getByRole('button', { name: 'Сохранить имя' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/users/8', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: null }),
+      });
+    });
+
+    expect(within(ownerRow).queryByText('Новое Имя')).not.toBeInTheDocument();
+    expect(within(ownerRow).getByText('owner2')).toBeInTheDocument();
+    expect(refreshMock).toHaveBeenCalledTimes(2);
   });
 });

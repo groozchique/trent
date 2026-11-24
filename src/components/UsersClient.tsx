@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { KeyRound, Trash2, UserPlus } from 'lucide-react';
+import { KeyRound, Pencil, Trash2, UserPlus } from 'lucide-react';
 import type { UserRole } from '@/db/schema';
 import { formatDateRu } from '@/lib/format';
 import {
@@ -19,8 +19,30 @@ const ROLE_LABELS: Record<UserRole, string> = {
 
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string }> = [
   { value: 'viewer', label: 'Просмотр' },
+  { value: 'owner', label: 'Собственник' },
   { value: 'admin', label: 'Администратор' },
 ];
+
+const ROLE_BADGE_STYLES: Record<
+  UserRole,
+  { backgroundColor: string; borderColor: string; color: string }
+> = {
+  admin: {
+    backgroundColor: 'var(--status-rent-bg)',
+    borderColor: 'var(--status-rent-border)',
+    color: 'var(--status-rent-text)',
+  },
+  owner: {
+    backgroundColor: 'var(--status-overdue-bg)',
+    borderColor: 'var(--status-overdue-border)',
+    color: 'var(--status-overdue-text)',
+  },
+  viewer: {
+    backgroundColor: 'var(--status-available-bg)',
+    borderColor: 'var(--status-available-border)',
+    color: 'var(--status-available-text)',
+  },
+};
 
 const INPUT_CLASS =
   'h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] disabled:opacity-60';
@@ -68,12 +90,15 @@ export function UsersClient({
   const [users, setUsers] = useState<SafeUserDto[]>(initialUsers);
 
   const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('viewer');
   const [creating, setCreating] = useState(false);
   const [createFeedback, setCreateFeedback] = useState<FeedbackState>(null);
 
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
+  const [editNameUserId, setEditNameUserId] = useState<number | null>(null);
+  const [editNameValue, setEditNameValue] = useState('');
   const [resetPasswordUserId, setResetPasswordUserId] = useState<number | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null);
@@ -84,6 +109,7 @@ export function UsersClient({
   }, [initialUsers]);
 
   const adminCount = users.filter((item) => item.role === 'admin').length;
+  const ownerCount = users.filter((item) => item.role === 'owner').length;
 
   async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -93,6 +119,7 @@ export function UsersClient({
 
     const parsed = createUserSchema.safeParse({
       username,
+      displayName,
       password,
       role,
     });
@@ -129,6 +156,7 @@ export function UsersClient({
         );
       }
       setUsername('');
+      setDisplayName('');
       setPassword('');
       setRole('viewer');
       setCreateFeedback({
@@ -143,6 +171,62 @@ export function UsersClient({
       });
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleUpdateDisplayName(
+    event: FormEvent<HTMLFormElement>,
+    targetUser: SafeUserDto,
+  ) {
+    event.preventDefault();
+    if (pendingUserId !== null) return;
+    setCreateFeedback(null);
+    setListFeedback(null);
+
+    const parsed = updateUserSchema.safeParse({ displayName: editNameValue });
+    if (!parsed.success) {
+      setListFeedback({
+        kind: 'error',
+        message: parsed.error.issues[0]?.message ?? 'Некорректное имя пользователя',
+      });
+      return;
+    }
+
+    setPendingUserId(targetUser.id);
+    try {
+      const response = await fetch(`/api/users/${targetUser.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed.data),
+      });
+
+      if (!response.ok) {
+        setListFeedback({
+          kind: 'error',
+          message: await readApiError(response, 'Не удалось обновить имя пользователя'),
+        });
+        return;
+      }
+
+      const data = (await response.json()) as { user?: SafeUserDto };
+      if (data.user) {
+        const updatedUser = data.user;
+        setUsers((prev) => prev.map((item) => (item.id === updatedUser.id ? updatedUser : item)));
+      }
+      setEditNameUserId(null);
+      setEditNameValue('');
+      setListFeedback({
+        kind: 'success',
+        message: `Имя пользователя «${targetUser.username}» обновлено`,
+      });
+      router.refresh();
+    } catch {
+      setListFeedback({
+        kind: 'error',
+        message: 'Не удалось обновить имя. Проверьте сеть',
+      });
+    } finally {
+      setPendingUserId(null);
     }
   }
 
@@ -286,6 +370,10 @@ export function UsersClient({
           <strong className="font-semibold text-[var(--text-primary)] tabular-nums">
             {adminCount}
           </strong>
+          {', '}собственников:{' '}
+          <strong className="font-semibold text-[var(--text-primary)] tabular-nums">
+            {ownerCount}
+          </strong>
         </p>
       </div>
 
@@ -295,8 +383,8 @@ export function UsersClient({
       >
         <h2 className="text-base font-semibold text-[var(--text-primary)]">Новый пользователь</h2>
 
-        <form onSubmit={handleCreateUser} noValidate className="mt-3.5 space-y-3.5">
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+        <form onSubmit={handleCreateUser} noValidate className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label htmlFor="create-user-username" className={LABEL_CLASS}>
                 Логин
@@ -310,6 +398,23 @@ export function UsersClient({
                 onChange={(event) => setUsername(event.target.value)}
                 disabled={creating}
                 placeholder="operator"
+                className={INPUT_CLASS}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="create-user-display-name" className={LABEL_CLASS}>
+                Имя / ФИО (необязательно)
+              </label>
+              <input
+                id="create-user-display-name"
+                name="displayName"
+                type="text"
+                autoComplete="off"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                disabled={creating}
+                placeholder="Сергей Волков"
                 className={INPUT_CLASS}
               />
             </div>
@@ -379,11 +484,12 @@ export function UsersClient({
           </div>
         )}
 
-        <ul className="mt-3.5 space-y-3">
+        <ul className="mt-4 space-y-3">
           {users.map((item) => {
             const isSelf = item.id === currentUserId;
             const isSoleAdmin = item.role === 'admin' && adminCount <= 1;
             const rowBusy = pendingUserId !== null || creating;
+            const isEditNameOpen = editNameUserId === item.id;
             const isResetOpen = resetPasswordUserId === item.id;
             const isDeleteOpen = confirmDeleteUserId === item.id;
 
@@ -391,36 +497,35 @@ export function UsersClient({
               <li
                 key={item.id}
                 data-testid={`user-row-${item.id}`}
-                className="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5"
+                className="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                        {item.username}
-                      </span>
+                      {item.displayName ? (
+                        <>
+                          <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                            {item.displayName}
+                          </span>
+                          <span className="truncate text-xs text-[var(--text-muted)]">
+                            Логин: {item.username}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                          {item.username}
+                        </span>
+                      )}
 
                       {isSelf && (
-                        <span className="inline-flex items-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-primary)]">
+                        <span className="inline-flex items-center rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2 py-0.5 text-xs font-medium text-[var(--text-primary)]">
                           Вы
                         </span>
                       )}
 
                       <span
-                        style={
-                          item.role === 'admin'
-                            ? {
-                                backgroundColor: 'var(--status-rent-bg)',
-                                borderColor: 'var(--status-rent-border)',
-                                color: 'var(--status-rent-text)',
-                              }
-                            : {
-                                backgroundColor: 'var(--status-available-bg)',
-                                borderColor: 'var(--status-available-border)',
-                                color: 'var(--status-available-text)',
-                              }
-                        }
-                        className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                        style={ROLE_BADGE_STYLES[item.role]}
+                        className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
                       >
                         {ROLE_LABELS[item.role]}
                       </span>
@@ -428,7 +533,7 @@ export function UsersClient({
 
                     <p className="text-xs text-[var(--text-secondary)] tabular-nums">
                       Создан {formatDateRu(item.createdAt)}
-                      {isSoleAdmin ? ' · единственный администратор' : ''}
+                      {isSoleAdmin ? ', единственный администратор' : ''}
                     </p>
                   </div>
 
@@ -455,6 +560,30 @@ export function UsersClient({
                       onClick={() => {
                         setListFeedback(null);
                         setConfirmDeleteUserId(null);
+                        setResetPasswordUserId(null);
+                        setResetPasswordValue('');
+                        if (isEditNameOpen) {
+                          setEditNameUserId(null);
+                          setEditNameValue('');
+                        } else {
+                          setEditNameUserId(item.id);
+                          setEditNameValue(item.displayName ?? '');
+                        }
+                      }}
+                      className={SECONDARY_BTN_CLASS}
+                    >
+                      <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>Изменить имя</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={rowBusy}
+                      onClick={() => {
+                        setListFeedback(null);
+                        setConfirmDeleteUserId(null);
+                        setEditNameUserId(null);
+                        setEditNameValue('');
                         setResetPasswordValue('');
                         setResetPasswordUserId(isResetOpen ? null : item.id);
                       }}
@@ -469,6 +598,8 @@ export function UsersClient({
                       disabled={rowBusy || isSelf || isSoleAdmin}
                       onClick={() => {
                         setListFeedback(null);
+                        setEditNameUserId(null);
+                        setEditNameValue('');
                         setResetPasswordUserId(null);
                         setResetPasswordValue('');
                         setConfirmDeleteUserId(isDeleteOpen ? null : item.id);
@@ -486,13 +617,61 @@ export function UsersClient({
                   </div>
                 </div>
 
+                {isEditNameOpen && (
+                  <form
+                    onSubmit={(event) => {
+                      void handleUpdateDisplayName(event, item);
+                    }}
+                    noValidate
+                    className="flex flex-col gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:flex-row sm:items-end"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <label htmlFor={`edit-name-${item.id}`} className={LABEL_CLASS}>
+                        Имя / ФИО
+                      </label>
+                      <input
+                        id={`edit-name-${item.id}`}
+                        name="displayName"
+                        type="text"
+                        autoComplete="off"
+                        value={editNameValue}
+                        onChange={(event) => setEditNameValue(event.target.value)}
+                        disabled={rowBusy}
+                        placeholder="Не указано"
+                        className={INPUT_CLASS}
+                      />
+                    </div>
+
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        disabled={rowBusy}
+                        onClick={() => {
+                          setEditNameUserId(null);
+                          setEditNameValue('');
+                        }}
+                        className={SECONDARY_BTN_CLASS}
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={rowBusy}
+                        className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                      >
+                        {pendingUserId === item.id ? 'Сохранение...' : 'Сохранить имя'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
                 {isResetOpen && (
                   <form
                     onSubmit={(event) => {
                       void handleResetPassword(event, item);
                     }}
                     noValidate
-                    className="flex flex-col gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:flex-row sm:items-end"
+                    className="flex flex-col gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:flex-row sm:items-end"
                   >
                     <div className="min-w-0 flex-1">
                       <label htmlFor={`reset-password-${item.id}`} className={LABEL_CLASS}>
