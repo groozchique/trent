@@ -103,6 +103,18 @@ describe('CarCompactCard', () => {
     expect(onSelect).toHaveBeenCalledWith(1);
   });
 
+  it('shows «Нет арендатора» and green «Всё в норме» deadline badge when activeDriverName is null and deadlineStatus is ok', () => {
+    render(<CarCompactCard car={SAMPLE_CARS[0]} onSelect={vi.fn()} />);
+
+    expect(screen.getByText('Нет арендатора')).toBeInTheDocument();
+    expect(screen.getByText('Сроки')).toBeInTheDocument();
+    const okBadge = screen.getByText('Всё в норме');
+    expect(okBadge).toHaveAttribute('data-deadline-status', 'ok');
+    expect(okBadge.style.color).toBe('var(--status-rent-text)');
+    expect(okBadge.style.backgroundColor).toBe('var(--status-rent-bg)');
+    expect(okBadge.style.borderColor).toBe('var(--status-rent-border)');
+  });
+
   it('shows activeDriverName and urgent deadline badge without leaking stsNumber on compact card', () => {
     const warningCar: CarSummaryDto = {
       ...SAMPLE_CARS[0],
@@ -380,7 +392,7 @@ describe('DashboardClient', () => {
     expect(screen.queryByText('Е789КХ 799')).not.toBeInTheDocument();
   });
 
-  it('renders 3 KPI cards and hides «Долг по аренде» when totalRentDebt30d === 0, and formats negative 30d net income', () => {
+  it('always renders all 4 KPI cards with green «0 ₽» and «Долгов нет» when totalRentDebt30d === 0, and formats negative 30d net income', () => {
     render(
       <DashboardClient
         initialCars={SAMPLE_CARS}
@@ -407,8 +419,11 @@ describe('DashboardClient', () => {
       'Аренда за месяц',
       'Доход менеджера за месяц',
       'Итог за 30 дней',
+      'Долг по аренде',
     ]);
-    expect(within(kpiRegion).queryByText('Долг по аренде')).not.toBeInTheDocument();
+    const zeroDebtValue = within(kpiRegion).getByText('0 ₽');
+    expect(zeroDebtValue.style.color).toBe('var(--status-rent-text)');
+    expect(within(kpiRegion).getByText('Долгов нет')).toBeInTheDocument();
     expect(within(kpiRegion).getByText('-4 000 ₽')).toBeInTheDocument();
     expect(
       within(kpiRegion).getByText('Аренда 4 000 ₽, менеджер 500 ₽, ремонт 7 500 ₽'),
@@ -416,14 +431,47 @@ describe('DashboardClient', () => {
     expect(screen.getByRole('button', { name: 'Сроки' })).toHaveTextContent('Сроки');
   });
 
-  it('renders empty state copy without штрафы when fleet is empty', () => {
-    render(<DashboardClient initialCars={[]} userRole="admin" />);
+  it('filters cars by ownerName via search query', () => {
+    const carsWithOwners: CarSummaryDto[] = [
+      { ...SAMPLE_CARS[0], ownerId: 10, ownerName: 'Сергей Волков' },
+      { ...SAMPLE_CARS[1], ownerId: 11, ownerName: 'Анна Петрова' },
+      { ...SAMPLE_CARS[2], ownerId: null, ownerName: null },
+    ];
+
+    render(<DashboardClient initialCars={carsWithOwners} userRole="admin" />);
+
+    const searchInput = screen.getByRole('searchbox');
+    expect(searchInput).toHaveAttribute(
+      'placeholder',
+      'Номер, марка, модель, водитель или собственник',
+    );
+    expect(searchInput).toHaveAttribute(
+      'aria-label',
+      'Поиск по номеру, марке, модели, водителю или собственнику',
+    );
+
+    fireEvent.change(searchInput, { target: { value: 'волков' } });
+    expect(screen.getByText('А123ВС 777')).toBeInTheDocument();
+    expect(screen.queryByText('В456ОР 777')).not.toBeInTheDocument();
+    expect(screen.queryByText('Е789КХ 799')).not.toBeInTheDocument();
+  });
+
+  it('renders empty state copy per role when fleet is empty', () => {
+    const { rerender } = render(<DashboardClient initialCars={[]} userRole="admin" />);
 
     expect(
       screen.getByText(
         'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, документы и ТО.',
       ),
     ).toBeInTheDocument();
+
+    rerender(<DashboardClient initialCars={[]} userRole="owner" />);
+    expect(
+      screen.getByText('К вашей учётной записи пока не привязаны автомобили.'),
+    ).toBeInTheDocument();
+
+    rerender(<DashboardClient initialCars={[]} userRole="viewer" />);
+    expect(screen.getByText('Попросите администратора добавить машины.')).toBeInTheDocument();
   });
 });
 

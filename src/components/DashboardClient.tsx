@@ -19,6 +19,12 @@ const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'available', label: 'Не в аренде' },
 ];
 
+const EMPTY_FLEET_COPY: Record<UserRole, string> = {
+  admin: 'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, документы и ТО.',
+  owner: 'К вашей учётной записи пока не привязаны автомобили.',
+  viewer: 'Попросите администратора добавить машины.',
+};
+
 function deriveFallbackSummary(carsList: CarSummaryDto[]): FleetDashboardSummary {
   return {
     totalRentDebt30d: carsList.reduce((sum, car) => sum + car.rentDebt30d, 0),
@@ -76,12 +82,14 @@ export function DashboardClient({
       car.brand.toLowerCase().includes(normalizedQuery) ||
       car.model.toLowerCase().includes(normalizedQuery) ||
       `${car.brand} ${car.model}`.toLowerCase().includes(normalizedQuery) ||
-      (car.activeDriverName ?? '').toLowerCase().includes(normalizedQuery)
+      (car.activeDriverName ?? '').toLowerCase().includes(normalizedQuery) ||
+      (car.ownerName ?? '').toLowerCase().includes(normalizedQuery)
     );
   });
 
   const inRentCount = cars.filter((car) => car.status === 'in_rent').length;
   const hasExpiredDeadlines = cars.some((car) => car.deadlineStatus === 'expired');
+  const hasRentDebt = summary.totalRentDebt30d > 0;
 
   async function refreshCars() {
     try {
@@ -157,11 +165,7 @@ export function DashboardClient({
 
       <section
         aria-label="Финансовая сводка"
-        className={
-          summary.totalRentDebt30d > 0
-            ? 'mt-4 grid grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3 lg:grid-cols-4'
-            : 'mt-4 grid grid-cols-1 gap-2.5 sm:mt-5 sm:grid-cols-3 sm:gap-3'
-        }
+        className="mt-4 grid grid-cols-2 gap-2.5 sm:mt-5 sm:gap-3 lg:grid-cols-4"
       >
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
           <p className="text-xs font-medium text-[var(--text-secondary)]">Аренда за месяц</p>
@@ -204,18 +208,20 @@ export function DashboardClient({
           </p>
         </div>
 
-        {summary.totalRentDebt30d > 0 && (
-          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
-            <p className="text-xs font-medium text-[var(--text-secondary)]">Долг по аренде</p>
-            <p
-              className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
-              style={{ color: 'var(--status-overdue-text)' }}
-            >
-              {formatRub(summary.totalRentDebt30d)}
-            </p>
-            <p className="mt-1 text-xs text-[var(--text-secondary)]">Просрочено за 30 дн.</p>
-          </div>
-        )}
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 sm:p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Долг по аренде</p>
+          <p
+            className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums sm:text-xl"
+            style={{
+              color: hasRentDebt ? 'var(--status-overdue-text)' : 'var(--status-rent-text)',
+            }}
+          >
+            {hasRentDebt ? formatRub(summary.totalRentDebt30d) : formatRub(0)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {hasRentDebt ? 'Просрочено за 30 дн.' : 'Долгов нет'}
+          </p>
+        </div>
       </section>
 
       <section
@@ -297,8 +303,8 @@ export function DashboardClient({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Номер, марка, модель или водитель"
-            aria-label="Поиск по номеру, марке, модели или водителю"
+            placeholder="Номер, марка, модель, водитель или собственник"
+            aria-label="Поиск по номеру, марке, модели, водителю или собственнику"
             className="h-9 w-full appearance-none rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] pr-8 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query && (
@@ -318,9 +324,7 @@ export function DashboardClient({
         <div className="mt-6 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 py-10 text-center">
           <p className="text-sm font-medium text-[var(--text-primary)]">Машин пока нет</p>
           <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            {userRole === 'admin'
-              ? 'Нажмите «Добавить машину», чтобы добавить первую машину и вести аренду, документы и ТО.'
-              : 'Попросите администратора добавить машины.'}
+            {EMPTY_FLEET_COPY[userRole]}
           </p>
         </div>
       ) : filteredCars.length === 0 ? (
