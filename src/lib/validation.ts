@@ -210,7 +210,15 @@ export type OwnerOptionDto = {
   label: string;
 };
 
-export type ReportPeriodType = 'weekly' | 'monthly';
+export type ReportPeriodType = 'weekly' | 'monthly' | 'yearly';
+
+export type ReportMaintenanceItem = {
+  id: number;
+  performedAt: string;
+  title: string;
+  mileage: number;
+  totalCost: number;
+};
 
 export type CarReportBreakdown = {
   carId: number;
@@ -221,6 +229,7 @@ export type CarReportBreakdown = {
   managerIncome: number;
   maintenanceCost: number;
   ownerPayout: number;
+  maintenanceItems: ReportMaintenanceItem[];
 };
 
 export type FleetReportDto = {
@@ -230,10 +239,14 @@ export type FleetReportDto = {
   periodLabel: string;
   carId: number | null;
   carLabel: string;
+  ownerId: number | null;
+  ownerName: string | null;
+  includeFinancial: boolean;
   includeMaintenance: boolean;
   paidRental: number;
   managerIncome: number;
   maintenanceCost: number;
+  maintenanceCount: number;
   ownerPayout: number;
   cars: CarReportBreakdown[];
   textPlain: string;
@@ -628,39 +641,43 @@ export function parsePositiveIntId(raw: string): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-const reportCarIdField = z
-  .unknown()
-  .optional()
-  .transform((val, ctx) => {
-    if (val === undefined || val === null || val === '') {
-      return null;
-    }
-    if (typeof val === 'number') {
-      if (Number.isSafeInteger(val) && val > 0) return val;
-    } else if (typeof val === 'string') {
-      const parsed = parsePositiveIntId(val.trim());
-      if (parsed !== null) return parsed;
-    }
-    ctx.addIssue({ code: 'custom', message: 'Некорректный идентификатор автомобиля' });
-    return z.NEVER;
-  });
+function parseReportIdParam(errorMessage: string) {
+  return z
+    .unknown()
+    .optional()
+    .transform((val, ctx) => {
+      if (val === undefined || val === null || val === '') {
+        return null;
+      }
+      if (typeof val === 'number') {
+        if (Number.isSafeInteger(val) && val > 0) return val;
+      } else if (typeof val === 'string') {
+        const parsed = parsePositiveIntId(val.trim());
+        if (parsed !== null) return parsed;
+      }
+      ctx.addIssue({ code: 'custom', message: errorMessage });
+      return z.NEVER;
+    });
+}
 
-const reportIncludeMaintenanceField = z
-  .unknown()
-  .optional()
-  .transform((val, ctx) => {
-    if (val === undefined || val === null) return false;
-    if (typeof val === 'boolean') return val;
-    if (val === 'true') return true;
-    if (val === 'false') return false;
-    ctx.addIssue({ code: 'custom', message: 'Некорректный параметр includeMaintenance' });
-    return z.NEVER;
-  });
+function parseReportBooleanParam(defaultValue: boolean, errorMessage: string) {
+  return z
+    .unknown()
+    .optional()
+    .transform((val, ctx) => {
+      if (val === undefined || val === null) return defaultValue;
+      if (typeof val === 'boolean') return val;
+      if (val === 'true') return true;
+      if (val === 'false') return false;
+      ctx.addIssue({ code: 'custom', message: errorMessage });
+      return z.NEVER;
+    });
+}
 
 export const reportQuerySchema = z
   .object(
     {
-      type: z.enum(['weekly', 'monthly'], 'Выберите тип отчёта'),
+      type: z.enum(['weekly', 'monthly', 'yearly'], 'Выберите тип отчёта'),
       date: isoDateField(
         'Укажите дату недели в формате ГГГГ-ММ-ДД',
         'Укажите дату недели в формате ГГГГ-ММ-ДД',
@@ -670,8 +687,15 @@ export const reportQuerySchema = z
         .trim()
         .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Укажите месяц в формате ГГГГ-ММ')
         .optional(),
-      carId: reportCarIdField,
-      includeMaintenance: reportIncludeMaintenanceField,
+      year: z
+        .string('Укажите год в формате ГГГГ (от 2000 до 2100)')
+        .trim()
+        .regex(/^(20\d{2}|2100)$/, 'Укажите год в формате ГГГГ (от 2000 до 2100)')
+        .optional(),
+      carId: parseReportIdParam('Некорректный идентификатор автомобиля'),
+      ownerId: parseReportIdParam('Некорректный идентификатор собственника'),
+      includeFinancial: parseReportBooleanParam(true, 'Некорректный параметр includeFinancial'),
+      includeMaintenance: parseReportBooleanParam(false, 'Некорректный параметр includeMaintenance'),
     },
     'Некорректные параметры отчёта',
   )
@@ -681,6 +705,23 @@ export const reportQuerySchema = z
     }
     if (data.type === 'monthly' && !data.month) {
       ctx.addIssue({ code: 'custom', path: ['month'], message: 'Укажите месяц' });
+    }
+    if (data.type === 'yearly' && !data.year) {
+      ctx.addIssue({ code: 'custom', path: ['year'], message: 'Укажите год' });
+    }
+    if (data.carId !== null && data.ownerId !== null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ownerId'],
+        message: 'Укажите либо автомобиль, либо собственника',
+      });
+    }
+    if (!data.includeFinancial && !data.includeMaintenance) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['includeFinancial'],
+        message: 'Выберите хотя бы один раздел отчёта',
+      });
     }
   });
 

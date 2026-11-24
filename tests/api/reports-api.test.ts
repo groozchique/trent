@@ -134,7 +134,9 @@ describe('GET /api/reports', () => {
     expect(weeklyMaintBody.report.cars).toHaveLength(1);
 
     const monthlyRes = await getReportsGet(
-      new Request(`http://localhost/api/reports?type=monthly&month=2026-11&carId=${car2.id}`),
+      new Request(
+        `http://localhost/api/reports?type=monthly&month=2026-11&carId=${car2.id}&includeMaintenance=true`,
+      ),
     );
     expect(monthlyRes.status).toBe(200);
     const monthlyBody = await monthlyRes.json();
@@ -143,17 +145,135 @@ describe('GET /api/reports', () => {
     expect(monthlyBody.report.includeMaintenance).toBe(true);
     expect(monthlyBody.report.paidRental).toBe(0);
     expect(monthlyBody.report.ownerPayout).toBe(0);
+
+    const yearlyRes = await getReportsGet(
+      new Request('http://localhost/api/reports?type=yearly&year=2026&includeMaintenance=true'),
+    );
+    expect(yearlyRes.status).toBe(200);
+    const yearlyBody = await yearlyRes.json();
+    expect(yearlyBody.report.type).toBe('yearly');
+    expect(yearlyBody.report.periodStart).toBe('2026-01-01');
+    expect(yearlyBody.report.periodEnd).toBe('2026-12-31');
+    expect(yearlyBody.report.periodLabel).toBe('2026 год');
+    expect(yearlyBody.report.maintenanceCost).toBe(2500);
+    expect(yearlyBody.report.maintenanceCount).toBe(1);
+    expect(yearlyBody.report.ownerPayout).toBe(10100);
   });
 
-  it('returns 400 on invalid query parameters and 404 on missing carId', async () => {
+  it('supports ownerId filter and maintenance-only / combined report sections', async () => {
+    const db = mockState.db!;
+    const [owner] = await db.select().from(users).where(eq(users.role, 'owner')).limit(1);
+    const [ownedCar] = await db
+      .insert(cars)
+      .values({
+        plate: 'О777ОО 77',
+        brand: 'Kia',
+        model: 'Rio',
+        status: 'in_rent',
+        mileage: 10000,
+        ownerId: owner.id,
+      })
+      .returning();
+    const [unownedCar] = await db
+      .insert(cars)
+      .values({
+        plate: 'Н888НН 77',
+        brand: 'Lada',
+        model: 'Vesta',
+        status: 'available',
+        mileage: 20000,
+        ownerId: null,
+      })
+      .returning();
+
+    const [rental] = await db
+      .insert(rentals)
+      .values({
+        carId: ownedCar.id,
+        renterName: 'Водитель Б',
+        rateAmount: 2000,
+        periodicity: 'daily',
+        startDate: '2026-01-01',
+        active: true,
+        managerCommissionPercent: 10,
+      })
+      .returning();
+    await db.insert(rentalPayments).values({
+      rentalId: rental.id,
+      dueDate: '2026-11-25',
+      amount: 10000,
+      paidAt: '2026-11-25T10:00:00Z',
+    });
+
+    await db.insert(maintenanceRecords).values([
+      {
+        carId: ownedCar.id,
+        title: 'Замена свечей',
+        performedAt: '2026-11-24',
+        mileage: 10100,
+        laborCost: 1500,
+        totalCost: 1500,
+      },
+      {
+        carId: unownedCar.id,
+        title: 'Чужой ремонт',
+        performedAt: '2026-11-24',
+        mileage: 20100,
+        laborCost: 5000,
+        totalCost: 5000,
+      },
+    ]);
+
     await loginAs('admin');
+    const maintOnlyRes = await getReportsGet(
+      new Request(
+        `http://localhost/api/reports?type=weekly&date=2026-11-25&ownerId=${owner.id}&includeFinancial=false&includeMaintenance=true`,
+      ),
+    );
+    expect(maintOnlyRes.status).toBe(200);
+    const maintOnlyBody = await maintOnlyRes.json();
+    expect(maintOnlyBody.report.ownerId).toBe(owner.id);
+    expect(maintOnlyBody.report.includeFinancial).toBe(false);
+    expect(maintOnlyBody.report.includeMaintenance).toBe(true);
+    expect(maintOnlyBody.report.paidRental).toBe(0);
+    expect(maintOnlyBody.report.ownerPayout).toBe(0);
+    expect(maintOnlyBody.report.maintenanceCost).toBe(1500);
+    expect(maintOnlyBody.report.maintenanceCount).toBe(1);
+    expect(maintOnlyBody.report.cars).toHaveLength(1);
+    expect(maintOnlyBody.report.cars[0].carId).toBe(ownedCar.id);
+
+    const combinedRes = await getReportsGet(
+      new Request(
+        `http://localhost/api/reports?type=weekly&date=2026-11-25&ownerId=${owner.id}&includeFinancial=true&includeMaintenance=true`,
+      ),
+    );
+    expect(combinedRes.status).toBe(200);
+    const combinedBody = await combinedRes.json();
+    expect(combinedBody.report.paidRental).toBe(10000);
+    expect(combinedBody.report.managerIncome).toBe(1000);
+    expect(combinedBody.report.maintenanceCost).toBe(1500);
+    expect(combinedBody.report.ownerPayout).toBe(7500);
+  });
+
+  it('returns 400 on invalid query parameters and 404 on missing carId or invalid ownerId', async () => {
+    await loginAs('admin');
+    const [adminUser] = await mockState.db!
+      .select()
+      .from(users)
+      .where(eq(users.role, 'admin'))
+      .limit(1);
 
     const badUrls = [
-      'http://localhost/api/reports?type=yearly&date=2026-11-25',
+      'http://localhost/api/reports?type=quarterly&date=2026-11-25',
       'http://localhost/api/reports?type=weekly&date=2026-02-30',
       'http://localhost/api/reports?type=monthly&month=2026-13',
       'http://localhost/api/reports?type=monthly',
+      'http://localhost/api/reports?type=yearly',
+      'http://localhost/api/reports?type=yearly&year=1999',
       'http://localhost/api/reports?type=weekly&date=2026-11-25&carId=abc',
+      'http://localhost/api/reports?type=weekly&date=2026-11-25&ownerId=abc',
+      'http://localhost/api/reports?type=weekly&date=2026-11-25&carId=1&ownerId=2',
+      'http://localhost/api/reports?type=weekly&date=2026-11-25&includeFinancial=false&includeMaintenance=false',
       'http://localhost/api/reports?type=weekly&date=2026-11-25&includeMaintenance=maybe',
     ];
 
@@ -164,9 +284,19 @@ describe('GET /api/reports', () => {
       expect(body.error).toMatch(/[А-Яа-яЁё]/);
     }
 
-    const notFoundRes = await getReportsGet(
+    const notFoundCarRes = await getReportsGet(
       new Request('http://localhost/api/reports?type=weekly&date=2026-11-25&carId=99999'),
     );
-    expect(notFoundRes.status).toBe(404);
+    expect(notFoundCarRes.status).toBe(404);
+
+    const notFoundOwnerRes = await getReportsGet(
+      new Request('http://localhost/api/reports?type=weekly&date=2026-11-25&ownerId=99999'),
+    );
+    expect(notFoundOwnerRes.status).toBe(404);
+
+    const nonOwnerRes = await getReportsGet(
+      new Request(`http://localhost/api/reports?type=weekly&date=2026-11-25&ownerId=${adminUser.id}`),
+    );
+    expect(nonOwnerRes.status).toBe(404);
   });
 });

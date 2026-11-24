@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm';
 import type { AppDb } from '@/db';
-import { cars, maintenanceRecords, rentalPayments, rentals } from '@/db/schema';
+import { cars, maintenanceRecords, rentalPayments, rentals, users } from '@/db/schema';
 import { ApiError } from '@/lib/cars';
 import { groupPaymentsByRental, sumPaidAndManagerInRange } from '@/lib/finances';
 import {
@@ -10,9 +10,16 @@ import {
   shiftUtcDaysIso,
 } from '@/lib/format';
 export { formatSignedRubPlain };
-import type { CarReportBreakdown, FleetReportDto, ReportPeriodType } from '@/lib/validation';
+import { formatUserLabel } from '@/lib/users';
+import type {
+  CarReportBreakdown,
+  FleetReportDto,
+  ReportMaintenanceItem,
+  ReportPeriodType,
+} from '@/lib/validation';
 
 const YEAR_MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+const YEAR_RE = /^(20\d{2}|2100)$/;
 
 const RU_MONTH_NAMES = [
   'Январь',
@@ -52,6 +59,17 @@ export function getCalendarMonthRange(yearMonth: string): { start: string; end: 
   };
 }
 
+/** Return first and last calendar day (`YYYY-MM-DD`) for `year` (`2000..2100`). */
+export function getCalendarYearRange(year: string): { start: string; end: string } {
+  if (!YEAR_RE.test(year)) {
+    throw new ApiError(400, 'Укажите год в формате ГГГГ (от 2000 до 2100)');
+  }
+  return {
+    start: `${year}-01-01`,
+    end: `${year}-12-31`,
+  };
+}
+
 /** Format a deterministic Russian period label without em/en dashes. */
 export function formatReportPeriodLabel(
   type: ReportPeriodType,
@@ -62,6 +80,9 @@ export function formatReportPeriodLabel(
     return `неделя с ${formatDateRu(start)} по ${formatDateRu(end)}`;
   }
   const dt = new Date(parseUtcDateMs(start));
+  if (type === 'yearly') {
+    return `${dt.getUTCFullYear()} год`;
+  }
   return `${RU_MONTH_NAMES[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`;
 }
 
@@ -71,39 +92,85 @@ export function formatReportText(
   format: 'plain' | 'telegram',
 ): string {
   const bold = (text: string) => (format === 'telegram' ? `**${text}**` : text);
-  const titlePrefix = report.type === 'weekly' ? 'Еженедельный отчёт' : 'Ежемесячный отчёт';
+  const periodNoun =
+    report.type === 'weekly'
+      ? 'Еженедельный'
+      : report.type === 'monthly'
+        ? 'Ежемесячный'
+        : 'Годовой';
+  const reportKind =
+    report.includeFinancial && report.includeMaintenance
+      ? 'отчёт'
+      : report.includeFinancial
+        ? 'финансовый отчёт'
+        : 'отчёт по ремонту';
+
+  const scopeLine =
+    report.ownerId !== null
+      ? `Собственник: ${report.ownerName ?? ''}`
+      : `Автомобиль: ${report.carLabel}`;
 
   const lines: string[] = [
-    bold(`${titlePrefix} (${report.periodLabel})`),
-    `Автомобиль: ${report.carLabel}`,
-    '',
-    `Оплаченная аренда: ${formatSignedRubPlain(report.paidRental)}`,
-    `Менеджеру автопарка: ${formatSignedRubPlain(report.managerIncome)}`,
+    bold(`${periodNoun} ${reportKind} (${report.periodLabel})`),
+    scopeLine,
   ];
 
-  if (report.includeMaintenance) {
-    lines.push(`Ремонт: ${formatSignedRubPlain(report.maintenanceCost)}`);
+  if (report.includeFinancial) {
+    lines.push(
+      '',
+      `Оплаченная аренда: ${formatSignedRubPlain(report.paidRental)}`,
+      `Менеджеру автопарка: ${formatSignedRubPlain(report.managerIncome)}`,
+    );
+    if (report.includeMaintenance) {
+      lines.push(`Ремонт: ${formatSignedRubPlain(report.maintenanceCost)}`);
+    }
+    lines.push(`К выплате собственнику: ${bold(formatSignedRubPlain(report.ownerPayout))}`);
+
+    if (report.carId === null && report.cars.length > 0) {
+      lines.push('', bold('По машинам:'));
+      for (const car of report.cars) {
+        const maintPart = report.includeMaintenance
+          ? `, ремонт ${formatSignedRubPlain(car.maintenanceCost)}`
+          : '';
+        lines.push(
+          `${car.brand} ${car.model} (${car.plate}): аренда ${formatSignedRubPlain(car.paidRental)}, менеджеру ${formatSignedRubPlain(car.managerIncome)}${maintPart}, собственнику ${formatSignedRubPlain(car.ownerPayout)}`,
+        );
+      }
+    }
   }
 
-  lines.push(`К выплате собственнику: ${bold(formatSignedRubPlain(report.ownerPayout))}`);
-
-  if (report.carId === null && report.cars.length > 0) {
+  if (report.includeMaintenance) {
     lines.push('');
-    lines.push(bold('По машинам:'));
-    for (const car of report.cars) {
-      const maintPart = report.includeMaintenance
-        ? `, ремонт ${formatSignedRubPlain(car.maintenanceCost)}`
-        : '';
+    if (!report.includeFinancial) {
       lines.push(
-        `${car.brand} ${car.model} (${car.plate}): аренда ${formatSignedRubPlain(car.paidRental)}, менеджеру ${formatSignedRubPlain(car.managerIncome)}${maintPart}, собственнику ${formatSignedRubPlain(car.ownerPayout)}`,
+        `Итого на ремонт: ${bold(formatSignedRubPlain(report.maintenanceCost))} (записей: ${report.maintenanceCount})`,
+        '',
       );
+    }
+    lines.push(bold('Работы по ремонту:'));
+    const carsWithMaintenance = report.cars.filter((car) => car.maintenanceItems.length > 0);
+    if (carsWithMaintenance.length === 0) {
+      lines.push('Работ по ремонту за период не было');
+    } else {
+      for (const car of carsWithMaintenance) {
+        if (report.carId === null) {
+          lines.push(
+            `${car.brand} ${car.model} (${car.plate}): ${formatSignedRubPlain(car.maintenanceCost)}`,
+          );
+        }
+        for (const item of car.maintenanceItems) {
+          lines.push(
+            `- ${formatDateRu(item.performedAt)}, ${item.title}: ${formatSignedRubPlain(item.totalCost)}`,
+          );
+        }
+      }
     }
   }
 
   return lines.join('\n');
 }
 
-/** Build a fleet or single-car financial report over `[periodStart, periodEnd]`. */
+/** Build a fleet, owner-scoped, or single-car report over `[periodStart, periodEnd]`. */
 export async function buildReport(
   database: AppDb,
   params: {
@@ -112,44 +179,72 @@ export async function buildReport(
     periodEnd: string;
     periodLabel?: string;
     carId: number | null;
+    ownerId?: number | null;
+    includeFinancial?: boolean;
     includeMaintenance: boolean;
   },
 ): Promise<FleetReportDto> {
-  const effectiveIncludeMaintenance =
-    params.type === 'monthly' ? true : params.includeMaintenance;
+  const effectiveOwnerId = params.ownerId ?? null;
+  const effectiveIncludeFinancial = params.includeFinancial ?? true;
+  const effectiveIncludeMaintenance = Boolean(params.includeMaintenance);
+
+  if (params.carId !== null && effectiveOwnerId !== null) {
+    throw new ApiError(400, 'Укажите либо автомобиль, либо собственника');
+  }
+  if (!effectiveIncludeFinancial && !effectiveIncludeMaintenance) {
+    throw new ApiError(400, 'Выберите хотя бы один раздел отчёта');
+  }
+
+  let ownerName: string | null = null;
+  if (effectiveOwnerId !== null) {
+    const [ownerRow] = await database
+      .select({
+        id: users.id,
+        username: users.username,
+        displayName: users.displayName,
+        role: users.role,
+      })
+      .from(users)
+      .where(eq(users.id, effectiveOwnerId));
+
+    if (!ownerRow || ownerRow.role !== 'owner') {
+      throw new ApiError(404, 'Собственник не найден');
+    }
+    ownerName = formatUserLabel(ownerRow);
+  }
 
   const carRows =
     params.carId !== null
       ? await database.select().from(cars).where(eq(cars.id, params.carId))
-      : await database.select().from(cars).orderBy(asc(cars.id));
+      : effectiveOwnerId !== null
+        ? await database
+            .select()
+            .from(cars)
+            .where(eq(cars.ownerId, effectiveOwnerId))
+            .orderBy(asc(cars.id))
+        : await database.select().from(cars).orderBy(asc(cars.id));
 
   if (params.carId !== null && carRows.length === 0) {
     throw new ApiError(404, 'Автомобиль не найден');
   }
 
+  const carIds = carRows.map((car) => car.id);
+
   const rentalRows =
-    carRows.length === 0
+    !effectiveIncludeFinancial || carIds.length === 0
       ? []
-      : params.carId !== null
-        ? await database
-            .select({
-              id: rentals.id,
-              carId: rentals.carId,
-              managerCommissionPercent: rentals.managerCommissionPercent,
-            })
-            .from(rentals)
-            .where(eq(rentals.carId, params.carId))
-        : await database
-            .select({
-              id: rentals.id,
-              carId: rentals.carId,
-              managerCommissionPercent: rentals.managerCommissionPercent,
-            })
-            .from(rentals);
+      : await database
+          .select({
+            id: rentals.id,
+            carId: rentals.carId,
+            managerCommissionPercent: rentals.managerCommissionPercent,
+          })
+          .from(rentals)
+          .where(inArray(rentals.carId, carIds));
 
   const rentalIds = rentalRows.map((row) => row.id);
   const paymentRows =
-    rentalIds.length === 0
+    !effectiveIncludeFinancial || rentalIds.length === 0
       ? []
       : await database
           .select({
@@ -169,21 +264,26 @@ export async function buildReport(
           );
 
   const maintenanceRows =
-    !effectiveIncludeMaintenance || carRows.length === 0
+    !effectiveIncludeMaintenance || carIds.length === 0
       ? []
       : await database
           .select({
+            id: maintenanceRecords.id,
             carId: maintenanceRecords.carId,
+            title: maintenanceRecords.title,
+            performedAt: maintenanceRecords.performedAt,
+            mileage: maintenanceRecords.mileage,
             totalCost: maintenanceRecords.totalCost,
           })
           .from(maintenanceRecords)
           .where(
             and(
-              params.carId !== null ? eq(maintenanceRecords.carId, params.carId) : undefined,
+              inArray(maintenanceRecords.carId, carIds),
               gte(maintenanceRecords.performedAt, params.periodStart),
               lte(maintenanceRecords.performedAt, params.periodEnd),
             ),
-          );
+          )
+          .orderBy(asc(maintenanceRecords.performedAt), asc(maintenanceRecords.id));
 
   const rentalsByCar = new Map<number, typeof rentalRows>();
   for (const rental of rentalRows) {
@@ -198,11 +298,25 @@ export async function buildReport(
   const paymentsByRental = groupPaymentsByRental(paymentRows);
 
   const maintenanceSumByCar = new Map<number, number>();
+  const maintenanceItemsByCar = new Map<number, ReportMaintenanceItem[]>();
   for (const record of maintenanceRows) {
     maintenanceSumByCar.set(
       record.carId,
       (maintenanceSumByCar.get(record.carId) ?? 0) + record.totalCost,
     );
+    const item: ReportMaintenanceItem = {
+      id: record.id,
+      performedAt: record.performedAt,
+      title: record.title,
+      mileage: record.mileage,
+      totalCost: record.totalCost,
+    };
+    const bucket = maintenanceItemsByCar.get(record.carId);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      maintenanceItemsByCar.set(record.carId, [item]);
+    }
   }
 
   let paidRental = 0;
@@ -210,14 +324,30 @@ export async function buildReport(
   let maintenanceCost = 0;
 
   const carBreakdowns: CarReportBreakdown[] = carRows.map((car) => {
-    const carRentals = rentalsByCar.get(car.id) ?? [];
-    const carPayments = carRentals.flatMap((rental) => paymentsByRental.get(rental.id) ?? []);
-    const { paidRental: carPaidRental, managerIncome: carManagerIncome } =
-      sumPaidAndManagerInRange(carRentals, carPayments, params.periodStart, params.periodEnd);
+    let carPaidRental = 0;
+    let carManagerIncome = 0;
+    if (effectiveIncludeFinancial) {
+      const carRentals = rentalsByCar.get(car.id) ?? [];
+      const carPayments = carRentals.flatMap((rental) => paymentsByRental.get(rental.id) ?? []);
+      const summed = sumPaidAndManagerInRange(
+        carRentals,
+        carPayments,
+        params.periodStart,
+        params.periodEnd,
+      );
+      carPaidRental = summed.paidRental;
+      carManagerIncome = summed.managerIncome;
+    }
+
     const carMaintenanceCost = effectiveIncludeMaintenance
       ? (maintenanceSumByCar.get(car.id) ?? 0)
       : 0;
-    const carOwnerPayout = carPaidRental - carManagerIncome - carMaintenanceCost;
+    const carMaintenanceItems = effectiveIncludeMaintenance
+      ? (maintenanceItemsByCar.get(car.id) ?? [])
+      : [];
+    const carOwnerPayout = effectiveIncludeFinancial
+      ? carPaidRental - carManagerIncome - carMaintenanceCost
+      : 0;
 
     paidRental += carPaidRental;
     managerIncome += carManagerIncome;
@@ -232,10 +362,12 @@ export async function buildReport(
       managerIncome: carManagerIncome,
       maintenanceCost: carMaintenanceCost,
       ownerPayout: carOwnerPayout,
+      maintenanceItems: carMaintenanceItems,
     };
   });
 
-  const ownerPayout = paidRental - managerIncome - maintenanceCost;
+  const ownerPayout = effectiveIncludeFinancial ? paidRental - managerIncome - maintenanceCost : 0;
+  const maintenanceCount = effectiveIncludeMaintenance ? maintenanceRows.length : 0;
   const carLabel =
     params.carId === null
       ? 'Все машины'
@@ -251,10 +383,14 @@ export async function buildReport(
     periodLabel,
     carId: params.carId,
     carLabel,
+    ownerId: effectiveOwnerId,
+    ownerName,
+    includeFinancial: effectiveIncludeFinancial,
     includeMaintenance: effectiveIncludeMaintenance,
     paidRental,
     managerIncome,
     maintenanceCost,
+    maintenanceCount,
     ownerPayout,
     cars: carBreakdowns,
   };

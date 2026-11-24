@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { requireStaff } from '@/lib/auth/session';
 import { handleApiError } from '@/lib/cars';
-import { buildReport, getCalendarMonthRange, getIsoWeekRange } from '@/lib/reports';
+import {
+  buildReport,
+  getCalendarMonthRange,
+  getCalendarYearRange,
+  getIsoWeekRange,
+} from '@/lib/reports';
 import { reportQuerySchema } from '@/lib/validation';
 
 export async function GET(request: Request) {
@@ -14,20 +19,27 @@ export async function GET(request: Request) {
       type: searchParams.get('type') ?? 'weekly',
       date: searchParams.get('date') ?? undefined,
       month: searchParams.get('month') ?? undefined,
+      year: searchParams.get('year') ?? undefined,
       carId: searchParams.get('carId') ?? undefined,
+      ownerId: searchParams.get('ownerId') ?? undefined,
+      includeFinancial: searchParams.get('includeFinancial') ?? undefined,
       includeMaintenance: searchParams.get('includeMaintenance') ?? undefined,
     });
 
     const { start, end } =
       parsed.type === 'weekly'
         ? getIsoWeekRange(parsed.date!)
-        : getCalendarMonthRange(parsed.month!);
+        : parsed.type === 'monthly'
+          ? getCalendarMonthRange(parsed.month!)
+          : getCalendarYearRange(parsed.year!);
 
     const report = await buildReport(db, {
       type: parsed.type,
       periodStart: start,
       periodEnd: end,
       carId: parsed.carId,
+      ownerId: parsed.ownerId,
+      includeFinancial: parsed.includeFinancial,
       includeMaintenance: parsed.includeMaintenance,
     });
 
