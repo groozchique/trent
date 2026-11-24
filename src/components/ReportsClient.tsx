@@ -366,7 +366,7 @@ export function ReportsClient({
                     shiftUtcDaysIso(isValidIsoDate(prev) ? prev : initialDate, -7),
                   )
                 }
-                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>
@@ -375,7 +375,7 @@ export function ReportsClient({
                 aria-label="Дата недели"
                 value={anchorDate}
                 onChange={(e) => setAnchorDate(e.target.value)}
-                className="h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] tabular-nums focus:border-[var(--border-strong)]"
+                className="report-period-input h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-center text-sm text-[var(--text-primary)] tabular-nums focus:border-[var(--border-strong)]"
               />
               <button
                 type="button"
@@ -385,7 +385,7 @@ export function ReportsClient({
                     shiftUtcDaysIso(isValidIsoDate(prev) ? prev : initialDate, 7),
                   )
                 }
-                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>
@@ -402,7 +402,7 @@ export function ReportsClient({
                     shiftYearMonth(YEAR_MONTH_RE.test(prev) ? prev : initialMonth, -1),
                   )
                 }
-                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>
@@ -412,7 +412,7 @@ export function ReportsClient({
                 placeholder="ГГГГ-ММ"
                 value={monthValue}
                 onChange={(e) => setMonthValue(e.target.value)}
-                className="h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] tabular-nums focus:border-[var(--border-strong)]"
+                className="report-period-input h-9 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-center text-sm text-[var(--text-primary)] tabular-nums focus:border-[var(--border-strong)]"
               />
               <button
                 type="button"
@@ -422,7 +422,7 @@ export function ReportsClient({
                     shiftYearMonth(YEAR_MONTH_RE.test(prev) ? prev : initialMonth, 1),
                   )
                 }
-                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>
@@ -435,7 +435,7 @@ export function ReportsClient({
                 type="button"
                 aria-label="Предыдущий год"
                 onClick={() => setYearValue((prev) => shiftYear(prev, -1, initialYear))}
-                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>
@@ -448,13 +448,13 @@ export function ReportsClient({
                 aria-label="Год отчёта"
                 value={yearValue}
                 onChange={(e) => setYearValue(e.target.value)}
-                className="h-9 w-24 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] tabular-nums focus:border-[var(--border-strong)]"
+                className="report-period-input h-9 w-24 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-center text-sm text-[var(--text-primary)] tabular-nums focus:border-[var(--border-strong)]"
               />
               <button
                 type="button"
                 aria-label="Следующий год"
                 onClick={() => setYearValue((prev) => shiftYear(prev, 1, initialYear))}
-                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
               >
                 <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
               </button>
@@ -542,7 +542,7 @@ export function ReportsClient({
           <button
             type="button"
             onClick={() => setRetryTick((prev) => prev + 1)}
-            className="cursor-pointer rounded-lg border border-current px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
           >
             Повторить
           </button>
@@ -835,7 +835,7 @@ export function ReportsClient({
             <button
               type="button"
               onClick={() => void handleCopy('telegram')}
-              className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)]"
+              className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
             >
               <Copy className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>Копировать для Telegram</span>

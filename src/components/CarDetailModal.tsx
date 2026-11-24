@@ -287,7 +287,7 @@ export function CarDetailModal({
                       <button
                         type="button"
                         onClick={() => setShowAllFines(true)}
-                        className="inline-flex h-9 w-full cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
+                        className="inline-flex h-9 w-full cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
                       >
                         Посмотреть все ({visibleCar.fines.length})
                       </button>
@@ -541,7 +541,7 @@ export function CarDetailModal({
               {userRole === 'admin' && (
                 <Link
                   href={`/cars/${visibleCar.id}/manage`}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)]"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)]"
                 >
                   <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span>Управление</span>

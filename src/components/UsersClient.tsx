@@ -463,7 +463,7 @@ export function UsersClient({
             <button
               type="submit"
               disabled={creating}
-              className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              className="inline-flex h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               <UserPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{creating ? 'Создание...' : 'Создать пользователя'}</span>
@@ -653,7 +653,7 @@ export function UsersClient({
                       <button
                         type="submit"
                         disabled={rowBusy}
-                        className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                        className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
                       >
                         {pendingUserId === item.id ? 'Сохранение...' : 'Сохранить имя'}
                       </button>
@@ -701,7 +701,7 @@ export function UsersClient({
                       <button
                         type="submit"
                         disabled={rowBusy}
-                        className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                        className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
                       >
                         {pendingUserId === item.id ? 'Сохранение...' : 'Сохранить пароль'}
                       </button>

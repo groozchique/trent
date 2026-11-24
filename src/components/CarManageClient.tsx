@@ -82,7 +82,7 @@ const INPUT_CLASS =
 const LABEL_CLASS = 'mb-1.5 block text-xs font-medium text-[var(--text-secondary)]';
 
 const PRIMARY_BTN_CLASS =
-  'inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto';
+  'inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto';
 
 const SECONDARY_BTN_CLASS =
   'inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50';
@@ -694,7 +694,7 @@ function MaintenanceTab({
               type="button"
               onClick={addPartRow}
               disabled={submitting}
-              className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>Добавить запчасть</span>
@@ -1254,126 +1254,25 @@ function RentalTab({
         </h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2 space-y-2.5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1">
-                <label htmlFor="rental-driver" className={LABEL_CLASS}>
-                  Водитель
-                </label>
-                <select
-                  id="rental-driver"
-                  name="driverId"
-                  value={driverId}
-                  onChange={(event) => setDriverId(event.target.value)}
-                  disabled={busy}
-                  className={INPUT_CLASS}
-                >
-                  <option value="">Выберите водителя</option>
-                  {driverOptions.map((option) => (
-                    <option key={option.id} value={String(option.id)}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setNewDriverError(null);
-                  setShowNewDriver((prev) => !prev);
-                }}
-                className={`${SECONDARY_BTN_CLASS} w-full shrink-0 sm:w-auto`}
-              >
-                <UserPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Новый водитель</span>
-              </button>
-            </div>
-
-            {showNewDriver && (
-              <div
-                role="region"
-                aria-label="Новый водитель"
-                className="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5"
-              >
-                <p className="text-xs font-semibold text-[var(--text-primary)]">
-                  Добавить нового водителя
-                </p>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="new-driver-name" className={LABEL_CLASS}>
-                      ФИО
-                    </label>
-                    <input
-                      id="new-driver-name"
-                      type="text"
-                      value={newDriverName}
-                      onChange={(event) => setNewDriverName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          void handleCreateDriver();
-                        }
-                      }}
-                      disabled={creatingDriver}
-                      placeholder="Сидоров Максим Олегович"
-                      className={INPUT_CLASS}
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="new-driver-phone" className={LABEL_CLASS}>
-                      Телефон
-                    </label>
-                    <input
-                      id="new-driver-phone"
-                      type="tel"
-                      value={newDriverPhone}
-                      onChange={(event) => setNewDriverPhone(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          void handleCreateDriver();
-                        }
-                      }}
-                      disabled={creatingDriver}
-                      placeholder="+7 903 555-66-77"
-                      className={`${INPUT_CLASS} tabular-nums`}
-                    />
-                  </div>
-                </div>
-
-                <FeedbackBanner
-                  feedback={newDriverError ? { kind: 'error', message: newDriverError } : null}
-                />
-
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    disabled={creatingDriver}
-                    onClick={() => {
-                      setNewDriverError(null);
-                      setShowNewDriver(false);
-                    }}
-                    className={SECONDARY_BTN_CLASS}
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    type="button"
-                    disabled={creatingDriver}
-                    onClick={() => {
-                      void handleCreateDriver();
-                    }}
-                    className={PRIMARY_BTN_CLASS}
-                  >
-                    {creatingDriver ? 'Сохранение...' : 'Сохранить водителя'}
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="sm:col-span-2">
+            <label htmlFor="rental-driver" className={LABEL_CLASS}>
+              Водитель
+            </label>
+            <select
+              id="rental-driver"
+              name="driverId"
+              value={driverId}
+              onChange={(event) => setDriverId(event.target.value)}
+              disabled={busy}
+              className={INPUT_CLASS}
+            >
+              <option value="">Выберите водителя</option>
+              {driverOptions.map((option) => (
+                <option key={option.id} value={String(option.id)}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -1451,9 +1350,106 @@ function RentalTab({
           </div>
         </div>
 
+        {showNewDriver && (
+          <div
+            role="region"
+            aria-label="Новый водитель"
+            className="space-y-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5"
+          >
+            <p className="text-xs font-semibold text-[var(--text-primary)]">
+              Добавить нового водителя
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="new-driver-name" className={LABEL_CLASS}>
+                  ФИО
+                </label>
+                <input
+                  id="new-driver-name"
+                  type="text"
+                  value={newDriverName}
+                  onChange={(event) => setNewDriverName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void handleCreateDriver();
+                    }
+                  }}
+                  disabled={creatingDriver}
+                  placeholder="Сидоров Максим Олегович"
+                  className={INPUT_CLASS}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="new-driver-phone" className={LABEL_CLASS}>
+                  Телефон
+                </label>
+                <input
+                  id="new-driver-phone"
+                  type="tel"
+                  value={newDriverPhone}
+                  onChange={(event) => setNewDriverPhone(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      void handleCreateDriver();
+                    }
+                  }}
+                  disabled={creatingDriver}
+                  placeholder="+7 903 555-66-77"
+                  className={`${INPUT_CLASS} tabular-nums`}
+                />
+              </div>
+            </div>
+
+            <FeedbackBanner
+              feedback={newDriverError ? { kind: 'error', message: newDriverError } : null}
+            />
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={creatingDriver}
+                onClick={() => {
+                  setNewDriverError(null);
+                  setShowNewDriver(false);
+                }}
+                className={SECONDARY_BTN_CLASS}
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={creatingDriver}
+                onClick={() => {
+                  void handleCreateDriver();
+                }}
+                className={PRIMARY_BTN_CLASS}
+              >
+                {creatingDriver ? 'Сохранение...' : 'Сохранить водителя'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <FeedbackBanner feedback={feedback} />
 
-        <div className="flex justify-end">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setNewDriverError(null);
+              setShowNewDriver((prev) => !prev);
+            }}
+            className={`${SECONDARY_BTN_CLASS} w-full shrink-0 sm:w-auto`}
+          >
+            <UserPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Новый водитель</span>
+          </button>
+
           <button type="submit" disabled={busy} className={PRIMARY_BTN_CLASS}>
             {submitting ? 'Сохранение...' : 'Сохранить аренду'}
           </button>
