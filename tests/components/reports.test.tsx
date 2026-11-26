@@ -144,7 +144,7 @@ describe('ReportsPage SSR guard', () => {
     getCurrentUserMock.mockResolvedValue({ id: 2, username: 'viewer', role: 'viewer' });
     dbOrderByMock.mockResolvedValue(SAMPLE_CARS);
     listOwnersMock.mockResolvedValue(SAMPLE_OWNERS);
-    buildReportMock.mockResolvedValue(makeReport());
+    buildReportMock.mockResolvedValue(makeReport({ includeMaintenance: true }));
 
     const element = await ReportsPage();
     render(element);
@@ -156,7 +156,7 @@ describe('ReportsPage SSR guard', () => {
       carId: null,
       ownerId: null,
       includeFinancial: true,
-      includeMaintenance: false,
+      includeMaintenance: true,
     });
     expect(listOwnersMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -169,7 +169,7 @@ describe('ReportsPage SSR guard', () => {
     getCurrentUserMock.mockResolvedValue({ id: 1, username: 'admin', role: 'admin' });
     dbOrderByMock.mockResolvedValue(SAMPLE_CARS);
     listOwnersMock.mockResolvedValue(SAMPLE_OWNERS);
-    buildReportMock.mockResolvedValue(makeReport());
+    buildReportMock.mockResolvedValue(makeReport({ includeMaintenance: true }));
 
     const element = await ReportsPage();
     render(element);
@@ -181,7 +181,7 @@ describe('ReportsPage SSR guard', () => {
       carId: null,
       ownerId: null,
       includeFinancial: true,
-      includeMaintenance: false,
+      includeMaintenance: true,
     });
     expect(screen.getByRole('heading', { name: 'Отчёты' })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -242,6 +242,31 @@ describe('ReportsClient', () => {
     expect(within(breakdown).getByText('Kia Rio')).toBeInTheDocument();
     expect(within(breakdown).getByText('Hyundai Solaris')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Отчёт по ремонту' })).not.toBeInTheDocument();
+  });
+
+  it('renders both Финансовый отчёт and Отчёт по ремонту checked and enabled when both are active by default', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <ReportsClient
+        initialReport={makeReport({ includeFinancial: true, includeMaintenance: true })}
+        cars={SAMPLE_CARS}
+        owners={SAMPLE_OWNERS}
+        initialDate="2026-11-25"
+        initialMonth="2026-11"
+        initialYear="2026"
+      />,
+    );
+
+    const financialCheckbox = screen.getByRole('checkbox', { name: 'Финансовый отчёт' }) as HTMLInputElement;
+    const maintenanceCheckbox = screen.getByRole('checkbox', { name: 'Отчёт по ремонту' }) as HTMLInputElement;
+    expect(financialCheckbox.checked).toBe(true);
+    expect(financialCheckbox.disabled).toBe(false);
+    expect(maintenanceCheckbox.checked).toBe(true);
+    expect(maintenanceCheckbox.disabled).toBe(false);
+    expect(screen.getByRole('region', { name: 'Сводка отчёта' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Отчёт по ремонту' })).toBeInTheDocument();
   });
 
   it('toggles Отчёт по ремонту on and renders both financial summary and detailed per-car maintenance items', async () => {

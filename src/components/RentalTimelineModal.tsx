@@ -128,7 +128,7 @@ export function RentalTimelineModal({
 
   return (
     <ModalShell
-      title="Таймлайн оплаты аренды"
+      title="История оплаты аренды"
       headerMeta={
         rental ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)]">

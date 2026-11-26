@@ -9,7 +9,7 @@ import { KNOWN_BRANDS } from './BrandIcon';
 const STATUS_OPTIONS: Array<{ value: CarStatus; label: string }> = [
   { value: 'available', label: 'Не в аренде' },
   { value: 'in_rent', label: 'В аренде' },
-  { value: 'in_repair', label: 'На ремонте' },
+  { value: 'in_repair', label: 'В ремонте' },
 ];
 
 function AddCarModalBody({

@@ -769,11 +769,11 @@ describe('DriverDetailModal', () => {
 
     const historyHeading = await screen.findByRole('heading', { name: 'История аренды (1)' });
     const historySection = historyHeading.closest('section')!;
-    fireEvent.click(within(historySection).getByRole('button', { name: 'Таймлайн' }));
+    fireEvent.click(within(historySection).getByRole('button', { name: 'История' }));
 
     const dialogsAfterOpen = screen.getAllByRole('dialog');
     const timelineDialog = dialogsAfterOpen[dialogsAfterOpen.length - 1];
-    expect(within(timelineDialog).getByText('Таймлайн оплаты аренды')).toBeInTheDocument();
+    expect(within(timelineDialog).getByText('История оплаты аренды')).toBeInTheDocument();
     expect(within(timelineDialog).getByText('Skoda Octavia')).toBeInTheDocument();
     expect(within(timelineDialog).getByText('Е303ЕЕ 777')).toBeInTheDocument();
     expect(within(timelineDialog).getByText('Завершена')).toBeInTheDocument();

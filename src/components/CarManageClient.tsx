@@ -58,7 +58,7 @@ const VISIBLE_MANAGE_TABS = SHOW_FINES
 
 const CAR_STATUS_OPTIONS: Array<{ value: CarStatus; label: string }> = [
   { value: 'in_rent', label: 'В аренде' },
-  { value: 'in_repair', label: 'На ремонте' },
+  { value: 'in_repair', label: 'В ремонте' },
   { value: 'available', label: 'Не в аренде' },
 ];
 
@@ -2310,7 +2310,7 @@ export function CarManageClient({
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] sm:text-sm"
         >
           <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>На дашборд</span>
+          <span>В панель управления</span>
         </Link>
       </div>
 

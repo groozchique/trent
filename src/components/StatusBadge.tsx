@@ -17,7 +17,7 @@ const STATUS_META: Record<
     },
   },
   in_repair: {
-    label: 'На ремонте',
+    label: 'В ремонте',
     badgeStyle: {
       backgroundColor: 'var(--status-repair-bg)',
       borderColor: 'var(--status-repair-border)',

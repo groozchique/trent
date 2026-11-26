@@ -133,7 +133,7 @@ describe('StatusBadge', () => {
 
   it.each([
     ['in_rent', 'В аренде'],
-    ['in_repair', 'На ремонте'],
+    ['in_repair', 'В ремонте'],
     ['available', 'Не в аренде'],
   ] as const)('renders Russian status label for %s', (status, label) => {
     render(<StatusBadge status={status} />);

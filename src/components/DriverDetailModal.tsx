@@ -531,7 +531,7 @@ export function DriverDetailModal({
                           className="inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          <span>Таймлайн</span>
+                          <span>История</span>
                         </button>
                       </div>
                     </div>

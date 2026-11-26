@@ -112,12 +112,21 @@ describe('GET /api/reports', () => {
     expect(weeklyBody.report.type).toBe('weekly');
     expect(weeklyBody.report.periodStart).toBe('2026-11-23');
     expect(weeklyBody.report.periodEnd).toBe('2026-11-29');
-    expect(weeklyBody.report.includeMaintenance).toBe(false);
+    expect(weeklyBody.report.includeMaintenance).toBe(true);
     expect(weeklyBody.report.paidRental).toBe(14000);
     expect(weeklyBody.report.managerIncome).toBe(1400);
-    expect(weeklyBody.report.maintenanceCost).toBe(0);
-    expect(weeklyBody.report.ownerPayout).toBe(12600);
+    expect(weeklyBody.report.maintenanceCost).toBe(2500);
+    expect(weeklyBody.report.ownerPayout).toBe(10100);
     expect(weeklyBody.report.cars).toHaveLength(2);
+
+    const weeklyFinOnlyRes = await getReportsGet(
+      new Request('http://localhost/api/reports?type=weekly&date=2026-11-25&includeMaintenance=false'),
+    );
+    expect(weeklyFinOnlyRes.status).toBe(200);
+    const weeklyFinOnlyBody = await weeklyFinOnlyRes.json();
+    expect(weeklyFinOnlyBody.report.includeMaintenance).toBe(false);
+    expect(weeklyFinOnlyBody.report.maintenanceCost).toBe(0);
+    expect(weeklyFinOnlyBody.report.ownerPayout).toBe(12600);
 
     await loginAs('admin');
     const weeklyMaintRes = await getReportsGet(

@@ -15,7 +15,7 @@ type StatusFilter = 'all' | CarStatus;
 const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'all', label: 'Все' },
   { value: 'in_rent', label: 'В аренде' },
-  { value: 'in_repair', label: 'На ремонте' },
+  { value: 'in_repair', label: 'В ремонте' },
   { value: 'available', label: 'Не в аренде' },
 ];
 
@@ -303,7 +303,7 @@ export function DashboardClient({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Номер, марка, модель, водитель или собственник"
+            placeholder="Поиск"
             aria-label="Поиск по номеру, марке, модели, водителю или собственнику"
             className="h-9 w-full appearance-none rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] pr-8 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] [&::-webkit-search-cancel-button]:appearance-none"
           />

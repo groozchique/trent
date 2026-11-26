@@ -41,7 +41,7 @@ export default async function ReportsPage() {
       carId: null,
       ownerId: null,
       includeFinancial: true,
-      includeMaintenance: false,
+      includeMaintenance: true,
     }),
   ]);
 

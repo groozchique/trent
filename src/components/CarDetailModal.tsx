@@ -451,7 +451,7 @@ export function CarDetailModal({
                   </span>
 
                   <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
-                    <span className="hidden sm:inline">Таймлайн</span>
+                    <span className="hidden sm:inline">История</span>
                     <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
                   </span>
                 </button>

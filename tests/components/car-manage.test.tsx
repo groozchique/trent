@@ -270,7 +270,7 @@ describe('ManageCarPage server RBAC guard', () => {
     expect(listOwnersMock).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('heading', { name: /Kia Rio/i })).toBeInTheDocument();
     expect(screen.getByText('А123ВС 777')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /На дашборд/i })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: /В панель управления/i })).toHaveAttribute('href', '/');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Аренда' }));
     const driverSelect = screen.getByLabelText('Водитель') as HTMLSelectElement;

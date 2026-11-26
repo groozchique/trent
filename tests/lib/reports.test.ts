@@ -86,7 +86,7 @@ describe('reports date helpers and validation', () => {
       expect(okWeekly.data.carId).toBeNull();
       expect(okWeekly.data.ownerId).toBeNull();
       expect(okWeekly.data.includeFinancial).toBe(true);
-      expect(okWeekly.data.includeMaintenance).toBe(false);
+      expect(okWeekly.data.includeMaintenance).toBe(true);
     }
 
     const okYearly = reportQuerySchema.safeParse({
@@ -224,7 +224,7 @@ describe('buildReport and formatReportText', () => {
     expect(withMaint.maintenanceCost).toBe(3000);
     expect(withMaint.ownerPayout).toBe(9600);
     expect(withMaint.textPlain).toContain('Ремонт: 3 000 ₽');
-    expect(withMaint.textTelegram).toContain('Ремонт: 3 000 ₽');
+    expect(withMaint.textTelegram).toContain('> Ремонт: `3 000 ₽`');
   });
 
   it('respects includeMaintenance=false for monthly reports and renders negative owner payout when true', async () => {
@@ -396,9 +396,20 @@ describe('buildReport and formatReportText', () => {
     const telegram = formatReportText(sample, 'telegram');
 
     expect(plain).not.toContain('*');
-    expect(telegram).toContain('**Еженедельный отчёт (неделя с 23.11.2026 по 29.11.2026)**');
+    expect(plain).not.toContain('`');
+    expect(plain).not.toContain('>');
+    expect(telegram).toContain('**Еженедельный отчёт**\n__неделя с 23.11.2026 по 29.11.2026__');
+    expect(telegram).toContain('Автомобиль: **Все машины**');
+    expect(telegram).toContain('> Оплаченная аренда: `20 000 ₽`');
+    expect(telegram).toContain('> Менеджеру автопарка: `2 000 ₽`');
+    expect(telegram).toContain('> Ремонт: `3 000 ₽`');
+    expect(telegram).toContain('> К выплате собственнику: **15 000 ₽**');
     expect(telegram).toContain('**По машинам:**');
-    expect(telegram).toContain('**15 000 ₽**');
+    expect(telegram).toContain(
+      '• **Kia Rio** (`А123ВС 777`): аренда `20 000 ₽`, менеджеру `2 000 ₽`, ремонт `3 000 ₽`, собственнику **15 000 ₽**',
+    );
+    expect(telegram).toContain('**Работы по ремонту:**');
+    expect(telegram).toContain('> `26.11.2026`, ТО-1: `3 000 ₽`');
 
     for (const output of [plain, telegram]) {
       expect(output).not.toMatch(/[—–]/);
@@ -406,7 +417,8 @@ describe('buildReport and formatReportText', () => {
       expect(output).not.toContain('\\.');
       expect(output).not.toContain('\\-');
       expect(output).not.toMatch(/\p{Extended_Pictographic}/u);
-      expect(output).toContain('Kia Rio (А123ВС 777)');
+      expect(output).toContain('Kia Rio');
+      expect(output).toContain('А123ВС 777');
     }
   });
 
@@ -427,7 +439,7 @@ describe('buildReport and formatReportText', () => {
     expect(report.carLabel).toBe('Все машины');
     expect(report.textPlain).toContain('К выплате собственнику: 0 ₽');
     expect(report.textPlain).not.toContain('По машинам:');
-    expect(report.textTelegram).toContain('К выплате собственнику: **0 ₽**');
+    expect(report.textTelegram).toContain('> К выплате собственнику: **0 ₽**');
     expect(report.textTelegram).not.toContain('По машинам:');
     for (const output of [report.textPlain, report.textTelegram]) {
       expect(output).not.toMatch(/[—–]/);
@@ -489,7 +501,7 @@ describe('buildReport and formatReportText', () => {
       },
     ]);
     expect(report.textPlain).toContain('К выплате собственнику: -15 000 ₽');
-    expect(report.textTelegram).toContain('К выплате собственнику: **-15 000 ₽**');
+    expect(report.textTelegram).toContain('> К выплате собственнику: **-15 000 ₽**');
   });
 
   it('aggregates yearly report across full calendar year and respects includeMaintenance=false', async () => {

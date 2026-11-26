@@ -165,7 +165,7 @@ describe('DashboardClient', () => {
     expect(screen.getByText('В456ОР 777')).toBeInTheDocument();
     expect(screen.getByText('Е789КХ 799')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'На ремонте' }));
+    fireEvent.click(screen.getByRole('button', { name: 'В ремонте' }));
     expect(screen.queryByText('А123ВС 777')).not.toBeInTheDocument();
     expect(screen.getByText('В456ОР 777')).toBeInTheDocument();
     expect(screen.queryByText('Е789КХ 799')).not.toBeInTheDocument();
@@ -443,7 +443,7 @@ describe('DashboardClient', () => {
     const searchInput = screen.getByRole('searchbox');
     expect(searchInput).toHaveAttribute(
       'placeholder',
-      'Номер, марка, модель, водитель или собственник',
+      'Поиск',
     );
     expect(searchInput).toHaveAttribute(
       'aria-label',

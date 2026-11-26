@@ -695,7 +695,7 @@ export const reportQuerySchema = z
       carId: parseReportIdParam('Некорректный идентификатор автомобиля'),
       ownerId: parseReportIdParam('Некорректный идентификатор собственника'),
       includeFinancial: parseReportBooleanParam(true, 'Некорректный параметр includeFinancial'),
-      includeMaintenance: parseReportBooleanParam(false, 'Некорректный параметр includeMaintenance'),
+      includeMaintenance: parseReportBooleanParam(true, 'Некорректный параметр includeMaintenance'),
     },
     'Некорректные параметры отчёта',
   )
