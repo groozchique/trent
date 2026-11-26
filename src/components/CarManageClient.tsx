@@ -39,6 +39,7 @@ import {
 import { BrandIcon, KNOWN_BRANDS } from './BrandIcon';
 import { CarDocumentsTab } from './CarDocumentsTab';
 import { FineStatusPill } from './FinesListModal';
+import { ModalShell } from './ModalShell';
 import { StatusBadge } from './StatusBadge';
 
 type ManageTabId = 'info' | 'documents' | 'maintenance' | 'rental' | 'fines';
@@ -462,30 +463,54 @@ function GeneralInfoTab({
   );
 }
 
-function MaintenanceTab({
-  car,
-  onCarUpdated,
+function MaintenanceRecordForm({
+  carId,
+  carMileage,
+  mode,
+  initialRecord,
+  idPrefix,
+  onSaved,
+  onCancel,
+  onSubmittingChange,
 }: {
-  car: CarDetailDto;
-  onCarUpdated: (patch?: (prev: CarDetailDto) => CarDetailDto) => Promise<void>;
+  carId: number;
+  carMileage: number;
+  mode: 'create' | 'edit';
+  initialRecord?: MaintenanceDto;
+  idPrefix: string;
+  onSaved: (record: MaintenanceDto | undefined, submittedMileage: number) => Promise<void>;
+  onCancel?: () => void;
+  onSubmittingChange?: (submitting: boolean) => void;
 }) {
-  const nextPartKey = useRef(1);
-  const prevCarIdRef = useRef(car.id);
-  const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
-  const [title, setTitle] = useState('');
-  const [performedAt, setPerformedAt] = useState(() => new Date().toISOString().slice(0, 10));
-  const [mileage, setMileage] = useState(() => String(car.mileage));
-  const [parts, setParts] = useState<PartRowDraft[]>([]);
-  const [laborCost, setLaborCost] = useState('0');
-  const [notes, setNotes] = useState('');
+  const isEdit = mode === 'edit' && initialRecord !== undefined;
+  const nextPartKey = useRef((initialRecord?.parts.length ?? 0) + 1);
+  const prevCarIdRef = useRef(carId);
+  const [title, setTitle] = useState(() => initialRecord?.title ?? '');
+  const [performedAt, setPerformedAt] = useState(
+    () => initialRecord?.performedAt ?? new Date().toISOString().slice(0, 10),
+  );
+  const [mileage, setMileage] = useState(() =>
+    String(initialRecord ? initialRecord.mileage : carMileage),
+  );
+  const [parts, setParts] = useState<PartRowDraft[]>(() =>
+    initialRecord
+      ? initialRecord.parts.map((part, index) => ({
+          key: index + 1,
+          name: part.name,
+          sku: part.sku ?? '',
+          quantity: String(part.quantity),
+          unitPrice: String(part.unitPrice),
+        }))
+      : [],
+  );
+  const [laborCost, setLaborCost] = useState(() =>
+    initialRecord ? String(initialRecord.laborCost) : '0',
+  );
+  const [notes, setNotes] = useState(() => initialRecord?.notes ?? '');
   const [submitting, setSubmitting] = useState(false);
-  const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
-  const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
 
-  function resetToCreate(nextMileage: number) {
-    setEditingRecordId(null);
+  function resetCreateForm(nextMileage: number) {
     setTitle('');
     setPerformedAt(new Date().toISOString().slice(0, 10));
     setMileage(String(nextMileage));
@@ -495,18 +520,19 @@ function MaintenanceTab({
   }
 
   useEffect(() => {
-    if (prevCarIdRef.current !== car.id) {
-      prevCarIdRef.current = car.id;
-      resetToCreate(car.mileage);
-      setConfirmDeleteRecordId(null);
-      setDeleteError(null);
+    if (mode !== 'create') return;
+    if (prevCarIdRef.current !== carId) {
+      prevCarIdRef.current = carId;
+      resetCreateForm(carMileage);
       setFeedback(null);
       return;
     }
-    if (editingRecordId === null) {
-      setMileage(String(car.mileage));
-    }
-  }, [car.id, car.mileage, editingRecordId]);
+    setMileage(String(carMileage));
+  }, [carId, carMileage, mode]);
+
+  useEffect(() => {
+    onSubmittingChange?.(submitting);
+  }, [onSubmittingChange, submitting]);
 
   const partsSum = parts.reduce(
     (sum, part) => sum + toPreviewInt(part.quantity) * toPreviewInt(part.unitPrice),
@@ -528,32 +554,6 @@ function MaintenanceTab({
 
   function removePartRow(key: number) {
     setParts((prev) => prev.filter((row) => row.key !== key));
-  }
-
-  function startEditRecord(record: MaintenanceDto) {
-    setFeedback(null);
-    setConfirmDeleteRecordId(null);
-    setDeleteError(null);
-    setEditingRecordId(record.id);
-    setTitle(record.title);
-    setPerformedAt(record.performedAt);
-    setMileage(String(record.mileage));
-    setLaborCost(String(record.laborCost));
-    setNotes(record.notes ?? '');
-    setParts(
-      record.parts.map((part) => ({
-        key: nextPartKey.current++,
-        name: part.name,
-        sku: part.sku ?? '',
-        quantity: String(part.quantity),
-        unitPrice: String(part.unitPrice),
-      })),
-    );
-  }
-
-  function cancelEdit() {
-    setFeedback(null);
-    resetToCreate(car.mileage);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -582,14 +582,12 @@ function MaintenanceTab({
       return;
     }
 
-    const targetRecordId = editingRecordId;
-    const isEdit = targetRecordId !== null;
     setSubmitting(true);
     try {
       const response = await fetch(
         isEdit
-          ? `/api/cars/${car.id}/maintenance/${targetRecordId}`
-          : `/api/cars/${car.id}/maintenance`,
+          ? `/api/cars/${carId}/maintenance/${initialRecord.id}`
+          : `/api/cars/${carId}/maintenance`,
         {
           method: isEdit ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -609,24 +607,12 @@ function MaintenanceTab({
       }
 
       const data = (await response.json()) as { record?: MaintenanceDto };
-      const nextCarMileage = Math.max(car.mileage, parsed.data.mileage);
-      await onCarUpdated((prev) => ({
-        ...prev,
-        mileage: Math.max(prev.mileage, parsed.data.mileage),
-        maintenance: data.record
-          ? isEdit
-            ? prev.maintenance.map((item) =>
-                item.id === targetRecordId ? data.record! : item,
-              )
-            : [data.record, ...prev.maintenance]
-          : prev.maintenance,
-      }));
+      await onSaved(data.record, parsed.data.mileage);
 
-      resetToCreate(nextCarMileage);
-      setFeedback({
-        kind: 'success',
-        message: isEdit ? 'Запись ТО обновлена' : 'Запись ТО добавлена',
-      });
+      if (!isEdit) {
+        resetCreateForm(Math.max(carMileage, parsed.data.mileage));
+        setFeedback({ kind: 'success', message: 'Запись ТО добавлена' });
+      }
     } catch {
       setFeedback({ kind: 'error', message: 'Не удалось сохранить запись ТО. Проверьте сеть' });
     } finally {
@@ -634,9 +620,289 @@ function MaintenanceTab({
     }
   }
 
+  return (
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      {mode === 'create' && (
+        <h2 className="text-base font-semibold text-[var(--text-primary)]">
+          Новое ТО или ремонт
+        </h2>
+      )}
+
+      <div>
+        <label htmlFor={`${idPrefix}-title`} className={LABEL_CLASS}>
+          Название работ
+        </label>
+        <input
+          id={`${idPrefix}-title`}
+          name="title"
+          type="text"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          disabled={submitting}
+          placeholder="ТО-150: замена масла и фильтров"
+          className={INPUT_CLASS}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor={`${idPrefix}-date`} className={LABEL_CLASS}>
+            Дата
+          </label>
+          <input
+            id={`${idPrefix}-date`}
+            name="performedAt"
+            type="date"
+            value={performedAt}
+            onChange={(event) => setPerformedAt(event.target.value)}
+            disabled={submitting}
+            className={`${INPUT_CLASS} tabular-nums`}
+          />
+        </div>
+
+        <div>
+          <label htmlFor={`${idPrefix}-mileage`} className={LABEL_CLASS}>
+            Пробег, км
+          </label>
+          <input
+            id={`${idPrefix}-mileage`}
+            name="mileage"
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            value={mileage}
+            onChange={(event) => setMileage(event.target.value)}
+            disabled={submitting}
+            className={`${INPUT_CLASS} tabular-nums`}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3 border-t border-[var(--border-subtle)] pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+            Запчасти и материалы
+          </h3>
+          <button
+            type="button"
+            onClick={addPartRow}
+            disabled={submitting}
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>Добавить запчасть</span>
+          </button>
+        </div>
+
+        {parts.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-center text-xs text-[var(--text-secondary)]">
+            Запчасти не добавлены. Можно сохранить только стоимость работ
+          </p>
+        ) : (
+          <ul className="space-y-2.5">
+            {parts.map((row, index) => (
+              <li
+                key={row.key}
+                className="grid grid-cols-1 gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3 sm:grid-cols-12 sm:items-end"
+              >
+                <div className="sm:col-span-4">
+                  <label htmlFor={`${idPrefix}-part-name-${row.key}`} className={LABEL_CLASS}>
+                    Запчасть
+                  </label>
+                  <input
+                    id={`${idPrefix}-part-name-${row.key}`}
+                    type="text"
+                    value={row.name}
+                    onChange={(event) => updatePartRow(row.key, 'name', event.target.value)}
+                    disabled={submitting}
+                    placeholder="Фильтр масляный"
+                    className={INPUT_CLASS}
+                  />
+                </div>
+
+                <div className="sm:col-span-3">
+                  <label htmlFor={`${idPrefix}-part-sku-${row.key}`} className={LABEL_CLASS}>
+                    Артикул
+                  </label>
+                  <input
+                    id={`${idPrefix}-part-sku-${row.key}`}
+                    type="text"
+                    value={row.sku}
+                    onChange={(event) => updatePartRow(row.key, 'sku', event.target.value)}
+                    disabled={submitting}
+                    placeholder="Необязательно"
+                    className={`${INPUT_CLASS} font-mono text-xs tabular-nums`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 sm:col-span-4">
+                  <div>
+                    <label htmlFor={`${idPrefix}-part-qty-${row.key}`} className={LABEL_CLASS}>
+                      Кол-во
+                    </label>
+                    <input
+                      id={`${idPrefix}-part-qty-${row.key}`}
+                      type="number"
+                      min={1}
+                      step={1}
+                      inputMode="numeric"
+                      value={row.quantity}
+                      onChange={(event) => updatePartRow(row.key, 'quantity', event.target.value)}
+                      disabled={submitting}
+                      className={`${INPUT_CLASS} tabular-nums`}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor={`${idPrefix}-part-price-${row.key}`} className={LABEL_CLASS}>
+                      Цена, ₽
+                    </label>
+                    <input
+                      id={`${idPrefix}-part-price-${row.key}`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      value={row.unitPrice}
+                      onChange={(event) => updatePartRow(row.key, 'unitPrice', event.target.value)}
+                      disabled={submitting}
+                      placeholder="0"
+                      className={`${INPUT_CLASS} tabular-nums`}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end sm:col-span-1">
+                  <button
+                    type="button"
+                    onClick={() => removePartRow(row.key)}
+                    disabled={submitting}
+                    aria-label={`Удалить запчасть ${index + 1}`}
+                    className="inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-10"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor={`${idPrefix}-labor`} className={LABEL_CLASS}>
+            Стоимость работ, ₽
+          </label>
+          <input
+            id={`${idPrefix}-labor`}
+            name="laborCost"
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            value={laborCost}
+            onChange={(event) => setLaborCost(event.target.value)}
+            disabled={submitting}
+            className={`${INPUT_CLASS} tabular-nums`}
+          />
+        </div>
+
+        <div>
+          <label htmlFor={`${idPrefix}-notes`} className={LABEL_CLASS}>
+            Примечание
+          </label>
+          <input
+            id={`${idPrefix}-notes`}
+            name="notes"
+            type="text"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            disabled={submitting}
+            placeholder="Необязательно"
+            className={INPUT_CLASS}
+          />
+        </div>
+      </div>
+
+      <dl className="space-y-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5 text-sm">
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-xs text-[var(--text-secondary)]">Запчасти</dt>
+          <dd className="font-medium text-[var(--text-primary)] tabular-nums">
+            {formatRub(partsSum)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-xs text-[var(--text-secondary)]">Работы</dt>
+          <dd className="font-medium text-[var(--text-primary)] tabular-nums">
+            {formatRub(laborPreview)}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] pt-2">
+          <dt className="font-semibold text-[var(--text-primary)]">Итого</dt>
+          <dd
+            data-testid="maintenance-live-total"
+            className="text-base font-semibold text-[var(--text-primary)] tabular-nums"
+          >
+            {formatRub(liveTotal)}
+          </dd>
+        </div>
+      </dl>
+
+      <FeedbackBanner feedback={feedback} />
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={submitting}
+            className={SECONDARY_BTN_CLASS}
+          >
+            Отмена
+          </button>
+        )}
+        <button type="submit" disabled={submitting} className={PRIMARY_BTN_CLASS}>
+          {submitting
+            ? 'Сохранение...'
+            : isEdit
+              ? 'Сохранить изменения'
+              : 'Сохранить запись ТО'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MaintenanceTab({
+  car,
+  onCarUpdated,
+}: {
+  car: CarDetailDto;
+  onCarUpdated: (patch?: (prev: CarDetailDto) => CarDetailDto) => Promise<void>;
+}) {
+  const prevCarIdRef = useRef(car.id);
+  const [editingRecord, setEditingRecord] = useState<MaintenanceDto | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
+  const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [listFeedback, setListFeedback] = useState<FeedbackState>(null);
+
+  useEffect(() => {
+    if (prevCarIdRef.current !== car.id) {
+      prevCarIdRef.current = car.id;
+      setEditingRecord(null);
+      setConfirmDeleteRecordId(null);
+      setDeleteError(null);
+      setListFeedback(null);
+    }
+  }, [car.id]);
+
   async function handleDeleteRecord(record: MaintenanceDto) {
     setDeleteError(null);
-    setFeedback(null);
+    setListFeedback(null);
     setDeletingRecordId(record.id);
     try {
       const response = await fetch(`/api/cars/${car.id}/maintenance/${record.id}`, {
@@ -647,8 +913,8 @@ function MaintenanceTab({
         return;
       }
 
-      if (editingRecordId === record.id) {
-        resetToCreate(car.mileage);
+      if (editingRecord?.id === record.id) {
+        setEditingRecord(null);
       }
       setConfirmDeleteRecordId(null);
       setDeleteError(null);
@@ -658,7 +924,7 @@ function MaintenanceTab({
         maintenance: prev.maintenance.filter((item) => item.id !== record.id),
       }));
 
-      setFeedback({ kind: 'success', message: 'Запись ТО удалена' });
+      setListFeedback({ kind: 'success', message: 'Запись ТО удалена' });
     } catch {
       setDeleteError('Не удалось удалить запись ТО. Проверьте сеть');
     } finally {
@@ -668,255 +934,20 @@ function MaintenanceTab({
 
   return (
     <div className="space-y-6">
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
-        <h2 className="text-base font-semibold text-[var(--text-primary)]">
-          {editingRecordId !== null ? 'Редактирование записи ТО' : 'Новое ТО или ремонт'}
-        </h2>
-
-        <div>
-          <label htmlFor="maint-title" className={LABEL_CLASS}>
-            Название работ
-          </label>
-          <input
-            id="maint-title"
-            name="title"
-            type="text"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            disabled={submitting}
-            placeholder="ТО-150: замена масла и фильтров"
-            className={INPUT_CLASS}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="maint-date" className={LABEL_CLASS}>
-              Дата
-            </label>
-            <input
-              id="maint-date"
-              name="performedAt"
-              type="date"
-              value={performedAt}
-              onChange={(event) => setPerformedAt(event.target.value)}
-              disabled={submitting}
-              className={`${INPUT_CLASS} tabular-nums`}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="maint-mileage" className={LABEL_CLASS}>
-              Пробег, км
-            </label>
-            <input
-              id="maint-mileage"
-              name="mileage"
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
-              value={mileage}
-              onChange={(event) => setMileage(event.target.value)}
-              disabled={submitting}
-              className={`${INPUT_CLASS} tabular-nums`}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-3 border-t border-[var(--border-subtle)] pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-              Запчасти и материалы
-            </h3>
-            <button
-              type="button"
-              onClick={addPartRow}
-              disabled={submitting}
-              className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span>Добавить запчасть</span>
-            </button>
-          </div>
-
-          {parts.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-center text-xs text-[var(--text-secondary)]">
-              Запчасти не добавлены. Можно сохранить только стоимость работ
-            </p>
-          ) : (
-            <ul className="space-y-2.5">
-              {parts.map((row, index) => (
-                <li
-                  key={row.key}
-                  className="grid grid-cols-1 gap-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3 sm:grid-cols-12 sm:items-end"
-                >
-                  <div className="sm:col-span-4">
-                    <label htmlFor={`part-name-${row.key}`} className={LABEL_CLASS}>
-                      Запчасть
-                    </label>
-                    <input
-                      id={`part-name-${row.key}`}
-                      type="text"
-                      value={row.name}
-                      onChange={(event) => updatePartRow(row.key, 'name', event.target.value)}
-                      disabled={submitting}
-                      placeholder="Фильтр масляный"
-                      className={INPUT_CLASS}
-                    />
-                  </div>
-
-                  <div className="sm:col-span-3">
-                    <label htmlFor={`part-sku-${row.key}`} className={LABEL_CLASS}>
-                      Артикул
-                    </label>
-                    <input
-                      id={`part-sku-${row.key}`}
-                      type="text"
-                      value={row.sku}
-                      onChange={(event) => updatePartRow(row.key, 'sku', event.target.value)}
-                      disabled={submitting}
-                      placeholder="Необязательно"
-                      className={`${INPUT_CLASS} font-mono text-xs tabular-nums`}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2.5 sm:col-span-4">
-                    <div>
-                      <label htmlFor={`part-qty-${row.key}`} className={LABEL_CLASS}>
-                        Кол-во
-                      </label>
-                      <input
-                        id={`part-qty-${row.key}`}
-                        type="number"
-                        min={1}
-                        step={1}
-                        inputMode="numeric"
-                        value={row.quantity}
-                        onChange={(event) => updatePartRow(row.key, 'quantity', event.target.value)}
-                        disabled={submitting}
-                        className={`${INPUT_CLASS} tabular-nums`}
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor={`part-price-${row.key}`} className={LABEL_CLASS}>
-                        Цена, ₽
-                      </label>
-                      <input
-                        id={`part-price-${row.key}`}
-                        type="number"
-                        min={0}
-                        step={1}
-                        inputMode="numeric"
-                        value={row.unitPrice}
-                        onChange={(event) => updatePartRow(row.key, 'unitPrice', event.target.value)}
-                        disabled={submitting}
-                        placeholder="0"
-                        className={`${INPUT_CLASS} tabular-nums`}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end sm:col-span-1">
-                    <button
-                      type="button"
-                      onClick={() => removePartRow(row.key)}
-                      disabled={submitting}
-                      aria-label={`Удалить запчасть ${index + 1}`}
-                      className="inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-10"
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="maint-labor" className={LABEL_CLASS}>
-              Стоимость работ, ₽
-            </label>
-            <input
-              id="maint-labor"
-              name="laborCost"
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
-              value={laborCost}
-              onChange={(event) => setLaborCost(event.target.value)}
-              disabled={submitting}
-              className={`${INPUT_CLASS} tabular-nums`}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="maint-notes" className={LABEL_CLASS}>
-              Примечание
-            </label>
-            <input
-              id="maint-notes"
-              name="notes"
-              type="text"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              disabled={submitting}
-              placeholder="Необязательно"
-              className={INPUT_CLASS}
-            />
-          </div>
-        </div>
-
-        <dl className="space-y-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-3.5 text-sm">
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-xs text-[var(--text-secondary)]">Запчасти</dt>
-            <dd className="font-medium text-[var(--text-primary)] tabular-nums">
-              {formatRub(partsSum)}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-xs text-[var(--text-secondary)]">Работы</dt>
-            <dd className="font-medium text-[var(--text-primary)] tabular-nums">
-              {formatRub(laborPreview)}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] pt-2">
-            <dt className="font-semibold text-[var(--text-primary)]">Итого</dt>
-            <dd
-              data-testid="maintenance-live-total"
-              className="text-base font-semibold text-[var(--text-primary)] tabular-nums"
-            >
-              {formatRub(liveTotal)}
-            </dd>
-          </div>
-        </dl>
-
-        <FeedbackBanner feedback={feedback} />
-
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          {editingRecordId !== null && (
-            <button
-              type="button"
-              onClick={cancelEdit}
-              disabled={submitting}
-              className={SECONDARY_BTN_CLASS}
-            >
-              Отменить правку
-            </button>
-          )}
-          <button type="submit" disabled={submitting} className={PRIMARY_BTN_CLASS}>
-            {submitting
-              ? 'Сохранение...'
-              : editingRecordId !== null
-                ? 'Сохранить изменения'
-                : 'Сохранить запись ТО'}
-          </button>
-        </div>
-      </form>
+      <MaintenanceRecordForm
+        carId={car.id}
+        carMileage={car.mileage}
+        mode="create"
+        idPrefix="maint"
+        onSaved={async (record, submittedMileage) => {
+          setListFeedback(null);
+          await onCarUpdated((prev) => ({
+            ...prev,
+            mileage: Math.max(prev.mileage, submittedMileage),
+            maintenance: record ? [record, ...prev.maintenance] : prev.maintenance,
+          }));
+        }}
+      />
 
       <section
         aria-label="Последние записи ТО"
@@ -925,6 +956,7 @@ function MaintenanceTab({
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">
           Записи ТО и ремонта ({car.maintenance.length})
         </h3>
+        <FeedbackBanner feedback={listFeedback} />
         {car.maintenance.length === 0 ? (
           <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-center text-xs text-[var(--text-secondary)]">
             Записей пока нет
@@ -934,7 +966,7 @@ function MaintenanceTab({
             {car.maintenance.map((record) => {
               const isDeleteOpen = confirmDeleteRecordId === record.id;
               const isDeleting = deletingRecordId === record.id;
-              const rowBusy = submitting || deletingRecordId !== null;
+              const rowBusy = deletingRecordId !== null;
               return (
                 <li key={record.id} className="flex flex-col gap-2 px-3.5 py-2.5 text-sm">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
@@ -953,7 +985,12 @@ function MaintenanceTab({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => startEditRecord(record)}
+                          onClick={() => {
+                            setConfirmDeleteRecordId(null);
+                            setDeleteError(null);
+                            setListFeedback(null);
+                            setEditingRecord(record);
+                          }}
                           disabled={rowBusy}
                           className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
                         >
@@ -1032,6 +1069,38 @@ function MaintenanceTab({
           </ul>
         )}
       </section>
+
+      {editingRecord && (
+        <ModalShell
+          title="Редактирование записи ТО"
+          maxWidthClass="max-w-2xl"
+          closeDisabled={editSubmitting}
+          onClose={() => setEditingRecord(null)}
+        >
+          <MaintenanceRecordForm
+            key={editingRecord.id}
+            carId={car.id}
+            carMileage={car.mileage}
+            mode="edit"
+            initialRecord={editingRecord}
+            idPrefix="edit-maint"
+            onSubmittingChange={setEditSubmitting}
+            onCancel={() => setEditingRecord(null)}
+            onSaved={async (record, submittedMileage) => {
+              const targetId = editingRecord.id;
+              await onCarUpdated((prev) => ({
+                ...prev,
+                mileage: Math.max(prev.mileage, submittedMileage),
+                maintenance: record
+                  ? prev.maintenance.map((item) => (item.id === targetId ? record : item))
+                  : prev.maintenance,
+              }));
+              setEditingRecord(null);
+              setListFeedback({ kind: 'success', message: 'Запись ТО обновлена' });
+            }}
+          />
+        </ModalShell>
+      )}
     </div>
   );
 }

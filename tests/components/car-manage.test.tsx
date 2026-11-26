@@ -682,7 +682,7 @@ describe('CarManageClient', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(/Запись ТО добавлена/i);
   });
 
-  it('edits an existing maintenance record via PATCH and supports cancelling edit in «ТО и ремонт»', async () => {
+  it('edits an existing maintenance record in a modal popup via PATCH and supports cancelling', async () => {
     const editedRecord = {
       id: 21,
       carId: 7,
@@ -732,40 +732,53 @@ describe('CarManageClient', () => {
     const listSection = screen.getByRole('region', { name: 'Последние записи ТО' });
     fireEvent.click(within(listSection).getByRole('button', { name: 'Редактировать' }));
 
-    expect(screen.getByLabelText('Название работ')).toHaveValue('ТО-140: замена масла');
-    expect(screen.getByLabelText('Дата')).toHaveValue('2026-11-03');
-    expect(screen.getByLabelText(/Пробег/i)).toHaveValue(140000);
-    expect(screen.getByLabelText(/Стоимость работ/i)).toHaveValue(2000);
-    expect(screen.getByLabelText(/Примечание/i)).toHaveValue('Плановое ТО');
-    expect(screen.getByLabelText(/^Запчасть$/i)).toHaveValue('Масло 5W-30');
-    expect(screen.getByLabelText(/^Артикул$/i)).toHaveValue('OIL-530');
-    expect(screen.getByLabelText(/^Кол-во$/i)).toHaveValue(4);
-    expect(screen.getByLabelText(/^Цена, ₽$/i)).toHaveValue(900);
-    expect(screen.getByTestId('maintenance-live-total')).toHaveTextContent('5 600 ₽');
-    expect(screen.getByRole('button', { name: 'Сохранить изменения' })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: 'Редактирование записи ТО' });
+    const modal = within(dialog);
 
-    // Cancel edit restores create mode
-    fireEvent.click(screen.getByRole('button', { name: 'Отменить правку' }));
-    expect(screen.getByLabelText('Название работ')).toHaveValue('');
-    expect(screen.getByLabelText(/Пробег/i)).toHaveValue(142500);
-    expect(screen.queryByLabelText(/^Запчасть$/i)).not.toBeInTheDocument();
+    expect(modal.getByLabelText('Название работ')).toHaveValue('ТО-140: замена масла');
+    expect(modal.getByLabelText('Дата')).toHaveValue('2026-11-03');
+    expect(modal.getByLabelText(/Пробег/i)).toHaveValue(140000);
+    expect(modal.getByLabelText(/Стоимость работ/i)).toHaveValue(2000);
+    expect(modal.getByLabelText(/Примечание/i)).toHaveValue('Плановое ТО');
+    expect(modal.getByLabelText(/^Запчасть$/i)).toHaveValue('Масло 5W-30');
+    expect(modal.getByLabelText(/^Артикул$/i)).toHaveValue('OIL-530');
+    expect(modal.getByLabelText(/^Кол-во$/i)).toHaveValue(4);
+    expect(modal.getByLabelText(/^Цена, ₽$/i)).toHaveValue(900);
+    expect(modal.getByTestId('maintenance-live-total')).toHaveTextContent('5 600 ₽');
+    expect(modal.getByRole('button', { name: 'Сохранить изменения' })).toBeInTheDocument();
+
+    // Background creation form remains untouched
+    expect(document.getElementById('maint-title')).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Сохранить запись ТО' })).toBeInTheDocument();
 
-    // Re-enter edit mode, modify fields, and submit PATCH
+    // Cancel closes dialog without calling PATCH
+    fireEvent.click(modal.getByRole('button', { name: 'Отмена' }));
+    expect(screen.queryByRole('dialog', { name: 'Редактирование записи ТО' })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Escape closes dialog without calling PATCH
     fireEvent.click(within(listSection).getByRole('button', { name: 'Редактировать' }));
-    fireEvent.change(screen.getByLabelText('Название работ'), {
+    expect(screen.getByRole('dialog', { name: 'Редактирование записи ТО' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Редактирование записи ТО' })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Re-open edit modal, modify fields, and submit PATCH
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Редактировать' }));
+    const activeModal = within(screen.getByRole('dialog', { name: 'Редактирование записи ТО' }));
+    fireEvent.change(activeModal.getByLabelText('Название работ'), {
       target: { value: 'ТО-140: масло и фильтр' },
     });
-    fireEvent.change(screen.getByLabelText(/Пробег/i), { target: { value: '140500' } });
-    fireEvent.change(screen.getByLabelText(/^Цена, ₽$/i), { target: { value: '1000' } });
-    fireEvent.change(screen.getByLabelText(/Стоимость работ/i), { target: { value: '2500' } });
-    fireEvent.change(screen.getByLabelText(/Примечание/i), {
+    fireEvent.change(activeModal.getByLabelText(/Пробег/i), { target: { value: '140500' } });
+    fireEvent.change(activeModal.getByLabelText(/^Цена, ₽$/i), { target: { value: '1000' } });
+    fireEvent.change(activeModal.getByLabelText(/Стоимость работ/i), { target: { value: '2500' } });
+    fireEvent.change(activeModal.getByLabelText(/Примечание/i), {
       target: { value: 'Обновлено примечание' },
     });
 
-    expect(screen.getByTestId('maintenance-live-total')).toHaveTextContent('6 500 ₽');
+    expect(activeModal.getByTestId('maintenance-live-total')).toHaveTextContent('6 500 ₽');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Сохранить изменения' }));
+    fireEvent.click(activeModal.getByRole('button', { name: 'Сохранить изменения' }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/maintenance/21', {
@@ -789,13 +802,13 @@ describe('CarManageClient', () => {
       });
     });
 
-    expect(await screen.findByRole('status')).toHaveTextContent(/Запись ТО обновлена/i);
-    expect(screen.getByText('ТО-140: масло и фильтр')).toBeInTheDocument();
-    expect(screen.getByText('6 500 ₽')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Сохранить запись ТО' })).toBeInTheDocument();
+    expect(await within(listSection).findByRole('status')).toHaveTextContent(/Запись ТО обновлена/i);
+    expect(screen.queryByRole('dialog', { name: 'Редактирование записи ТО' })).not.toBeInTheDocument();
+    expect(within(listSection).getByText('ТО-140: масло и фильтр')).toBeInTheDocument();
+    expect(within(listSection).getByText('6 500 ₽')).toBeInTheDocument();
   });
 
-  it('deletes a maintenance record via inline confirmation, resets edit mode, and handles DELETE error', async () => {
+  it('deletes a maintenance record via inline confirmation and handles DELETE error', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url === '/api/cars/7/maintenance/21' && init?.method === 'DELETE') {
         return Promise.resolve({
@@ -832,10 +845,7 @@ describe('CarManageClient', () => {
     fireEvent.click(within(listSection).getByRole('button', { name: 'Отмена' }));
     expect(fetchMock).not.toHaveBeenCalled();
 
-    // Enter edit mode for record 21, then delete it and confirm edit form resets
-    fireEvent.click(within(listSection).getByRole('button', { name: 'Редактировать' }));
-    expect(screen.getByRole('button', { name: 'Сохранить изменения' })).toBeInTheDocument();
-
+    // Confirm delete -> removes row and shows status near list
     fireEvent.click(within(listSection).getByRole('button', { name: 'Удалить' }));
     fireEvent.click(within(listSection).getByRole('button', { name: 'Да, удалить' }));
 
@@ -845,9 +855,8 @@ describe('CarManageClient', () => {
       });
     });
 
-    expect(await screen.findByRole('status')).toHaveTextContent(/Запись ТО удалена/i);
+    expect(await within(listSection).findByRole('status')).toHaveTextContent(/Запись ТО удалена/i);
     expect(within(listSection).queryByText('ТО-140: замена масла')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Сохранить запись ТО' })).toBeInTheDocument();
   });
 
   it('shows inline error and keeps maintenance record when DELETE fails', async () => {
