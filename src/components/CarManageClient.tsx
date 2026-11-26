@@ -479,6 +479,9 @@ function MaintenanceTab({
   const [laborCost, setLaborCost] = useState('0');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
+  const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
 
   function resetToCreate(nextMileage: number) {
@@ -495,6 +498,8 @@ function MaintenanceTab({
     if (prevCarIdRef.current !== car.id) {
       prevCarIdRef.current = car.id;
       resetToCreate(car.mileage);
+      setConfirmDeleteRecordId(null);
+      setDeleteError(null);
       setFeedback(null);
       return;
     }
@@ -527,6 +532,8 @@ function MaintenanceTab({
 
   function startEditRecord(record: MaintenanceDto) {
     setFeedback(null);
+    setConfirmDeleteRecordId(null);
+    setDeleteError(null);
     setEditingRecordId(record.id);
     setTitle(record.title);
     setPerformedAt(record.performedAt);
@@ -624,6 +631,38 @@ function MaintenanceTab({
       setFeedback({ kind: 'error', message: 'Не удалось сохранить запись ТО. Проверьте сеть' });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleDeleteRecord(record: MaintenanceDto) {
+    setDeleteError(null);
+    setFeedback(null);
+    setDeletingRecordId(record.id);
+    try {
+      const response = await fetch(`/api/cars/${car.id}/maintenance/${record.id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        setDeleteError(await readApiError(response, 'Не удалось удалить запись ТО'));
+        return;
+      }
+
+      if (editingRecordId === record.id) {
+        resetToCreate(car.mileage);
+      }
+      setConfirmDeleteRecordId(null);
+      setDeleteError(null);
+
+      await onCarUpdated((prev) => ({
+        ...prev,
+        maintenance: prev.maintenance.filter((item) => item.id !== record.id),
+      }));
+
+      setFeedback({ kind: 'success', message: 'Запись ТО удалена' });
+    } catch {
+      setDeleteError('Не удалось удалить запись ТО. Проверьте сеть');
+    } finally {
+      setDeletingRecordId(null);
     }
   }
 
@@ -892,34 +931,104 @@ function MaintenanceTab({
           </p>
         ) : (
           <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
-            {car.maintenance.map((record) => (
-              <li
-                key={record.id}
-                className="flex flex-col gap-2 px-3.5 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-[var(--text-primary)]">{record.title}</p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--text-secondary)] tabular-nums">
-                    <span>{formatDateRu(record.performedAt)}</span>
-                    <span>{formatMileage(record.mileage)}</span>
-                    {record.parts.length > 0 && <span>Запчастей: {record.parts.length}</span>}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
-                  <span className="font-semibold text-[var(--text-primary)] tabular-nums">
-                    {formatRub(record.totalCost)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => startEditRecord(record)}
-                    disabled={submitting}
-                    className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Редактировать
-                  </button>
-                </div>
-              </li>
-            ))}
+            {car.maintenance.map((record) => {
+              const isDeleteOpen = confirmDeleteRecordId === record.id;
+              const isDeleting = deletingRecordId === record.id;
+              const rowBusy = submitting || deletingRecordId !== null;
+              return (
+                <li key={record.id} className="flex flex-col gap-2 px-3.5 py-2.5 text-sm">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-[var(--text-primary)]">{record.title}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--text-secondary)] tabular-nums">
+                        <span>{formatDateRu(record.performedAt)}</span>
+                        <span>{formatMileage(record.mileage)}</span>
+                        {record.parts.length > 0 && <span>Запчастей: {record.parts.length}</span>}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+                      <span className="font-semibold text-[var(--text-primary)] tabular-nums">
+                        {formatRub(record.totalCost)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEditRecord(record)}
+                          disabled={rowBusy}
+                          className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Редактировать
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setConfirmDeleteRecordId(isDeleteOpen ? null : record.id);
+                          }}
+                          disabled={rowBusy}
+                          style={{
+                            backgroundColor: 'var(--status-repair-bg)',
+                            borderColor: 'var(--status-repair-border)',
+                            color: 'var(--status-repair-text)',
+                          }}
+                          className="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span>Удалить</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isDeleteOpen && (
+                    <div
+                      style={{
+                        backgroundColor: 'var(--status-repair-bg)',
+                        borderColor: 'var(--status-repair-border)',
+                      }}
+                      className="space-y-2.5 rounded-lg border p-3"
+                    >
+                      <p
+                        style={{ color: 'var(--status-repair-text)' }}
+                        className="text-xs font-medium"
+                      >
+                        Удалить запись «{record.title}»? Отменить это нельзя.
+                      </p>
+                      <FeedbackBanner
+                        feedback={deleteError ? { kind: 'error', message: deleteError } : null}
+                      />
+                      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setConfirmDeleteRecordId(null);
+                          }}
+                          className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => {
+                            void handleDeleteRecord(record);
+                          }}
+                          style={{
+                            backgroundColor: 'var(--status-danger)',
+                            color: 'var(--status-danger-fg)',
+                          }}
+                          className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg px-3 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isDeleting ? 'Удаление...' : 'Да, удалить'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

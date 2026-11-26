@@ -18,6 +18,10 @@ import { POST as syncFinesPost } from '@/app/api/cars/[id]/fines/sync/route';
 import { PUT as upsertRentalPut } from '@/app/api/cars/[id]/rental/route';
 import { POST as togglePaymentPost } from '@/app/api/cars/[id]/rental/payments/route';
 import { POST as createMaintenancePost } from '@/app/api/cars/[id]/maintenance/route';
+import {
+  DELETE as deleteMaintenanceDelete,
+  PATCH as updateMaintenancePatch,
+} from '@/app/api/cars/[id]/maintenance/[recordId]/route';
 
 const mockState = vi.hoisted(() => ({
   cookieJar: new Map<string, string>(),
@@ -745,6 +749,111 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
     expect(detail.maintenance.map((m) => m.performedAt)).toEqual(['2026-11-18', '2026-10-01']);
     expect(detail.maintenance[0].parts).toHaveLength(3);
     expect(detail.maintenance[1].parts).toHaveLength(0);
+  });
+
+  it('deletes a maintenance record via DELETE /api/cars/[id]/maintenance/[recordId] with RBAC, scope, and part cascade checks', async () => {
+    const [carA] = await mockState.db!
+      .insert(cars)
+      .values({ plate: 'К111КК 777', brand: 'Skoda', model: 'Rapid', status: 'in_rent', mileage: 100000 })
+      .returning();
+    const [carB] = await mockState.db!
+      .insert(cars)
+      .values({ plate: 'К222КК 777', brand: 'Lada', model: 'Granta', status: 'available', mileage: 50000 })
+      .returning();
+
+    const [recToDelete] = await mockState.db!
+      .insert(maintenanceRecords)
+      .values({
+        carId: carA.id,
+        title: 'Замена масла',
+        performedAt: '2026-11-10',
+        mileage: 100000,
+        laborCost: 1000,
+        totalCost: 3500,
+        notes: null,
+      })
+      .returning();
+    await mockState.db!.insert(maintenanceParts).values({
+      recordId: recToDelete.id,
+      name: 'Масло 4л',
+      sku: null,
+      quantity: 1,
+      unitPrice: 2500,
+    });
+
+    const [siblingRec] = await mockState.db!
+      .insert(maintenanceRecords)
+      .values({
+        carId: carA.id,
+        title: 'Шиномонтаж',
+        performedAt: '2026-11-12',
+        mileage: 100200,
+        laborCost: 2000,
+        totalCost: 2000,
+        notes: null,
+      })
+      .returning();
+
+    const makeCtx = (carId: number | string, recordId: number | string) => ({
+      params: Promise.resolve({ id: String(carId), recordId: String(recordId) }),
+    });
+    const reqUrl = `http://localhost/api/cars/${carA.id}/maintenance/${recToDelete.id}`;
+
+    // 1) Unauthenticated -> 401
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx(carA.id, recToDelete.id))).status,
+    ).toBe(401);
+
+    // 2) Viewer & Owner -> 403
+    await loginAs('viewer');
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx(carA.id, recToDelete.id))).status,
+    ).toBe(403);
+    await loginAs('owner');
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx(carA.id, recToDelete.id))).status,
+    ).toBe(403);
+
+    // 3) Admin checks: 400 invalid ids, 404 missing/mismatched car or missing record
+    await loginAs('admin');
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx('abc', recToDelete.id))).status,
+    ).toBe(400);
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx(carA.id, '0'))).status,
+    ).toBe(400);
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx(9999, recToDelete.id))).status,
+    ).toBe(404);
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx(carB.id, recToDelete.id))).status,
+    ).toBe(404);
+    expect(
+      (await deleteMaintenanceDelete(new Request(reqUrl, { method: 'DELETE' }), makeCtx(carA.id, 9999))).status,
+    ).toBe(404);
+
+    // Confirm PATCH import also works (smoke check on existing route)
+    expect(updateMaintenancePatch).toBeTypeOf('function');
+
+    // 4) Valid delete -> 200, cascades parts, keeps sibling record
+    const delRes = await deleteMaintenanceDelete(
+      new Request(reqUrl, { method: 'DELETE' }),
+      makeCtx(carA.id, recToDelete.id),
+    );
+    expect(delRes.status).toBe(200);
+    expect(await delRes.json()).toEqual({ ok: true, deletedId: recToDelete.id });
+
+    const remainingRecords = await mockState.db!
+      .select()
+      .from(maintenanceRecords)
+      .where(eq(maintenanceRecords.carId, carA.id));
+    expect(remainingRecords.map((r) => r.id)).toEqual([siblingRec.id]);
+
+    const remainingParts = await mockState.db!
+      .select()
+      .from(maintenanceParts)
+      .where(eq(maintenanceParts.recordId, recToDelete.id));
+    expect(remainingParts).toHaveLength(0);
   });
 
   it('supports ownerId assignment via PATCH /api/cars/[id] and owner-scoped car summaries & detail access (Review Focus #2)', async () => {

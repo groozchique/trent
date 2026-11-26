@@ -75,3 +75,32 @@ export async function PATCH(request: Request, context: MaintenanceRouteContext) 
     return handleApiError(err);
   }
 }
+
+export async function DELETE(_request: Request, context: MaintenanceRouteContext) {
+  try {
+    await requireAdmin();
+    const { id, recordId: rawRecordId } = await context.params;
+    const carId = requirePositiveIntParam(id, 'Некорректный идентификатор автомобиля');
+    const recordId = requirePositiveIntParam(rawRecordId, 'Некорректный идентификатор записи ТО');
+
+    db.transaction((tx) => {
+      const car = tx.select({ id: cars.id }).from(cars).where(eq(cars.id, carId)).get();
+      if (!car) {
+        throw new ApiError(404, 'Автомобиль не найден');
+      }
+
+      const deleted = tx
+        .delete(maintenanceRecords)
+        .where(and(eq(maintenanceRecords.id, recordId), eq(maintenanceRecords.carId, carId)))
+        .returning({ id: maintenanceRecords.id })
+        .get();
+      if (!deleted) {
+        throw new ApiError(404, 'Запись ТО не найдена');
+      }
+    });
+
+    return NextResponse.json({ ok: true, deletedId: recordId });
+  } catch (err) {
+    return handleApiError(err);
+  }
+}

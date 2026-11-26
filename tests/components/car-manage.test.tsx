@@ -795,6 +795,82 @@ describe('CarManageClient', () => {
     expect(screen.getByRole('button', { name: 'Сохранить запись ТО' })).toBeInTheDocument();
   });
 
+  it('deletes a maintenance record via inline confirmation, resets edit mode, and handles DELETE error', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/cars/7/maintenance/21' && init?.method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, deletedId: 21 }),
+        });
+      }
+      if (url === '/api/cars/7' && (!init?.method || init.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            car: { ...SAMPLE_CAR, maintenance: [] },
+          }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CarManageClient car={SAMPLE_CAR} drivers={SAMPLE_DRIVERS} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'ТО и ремонт' }));
+
+    const listSection = screen.getByRole('region', { name: 'Последние записи ТО' });
+    expect(within(listSection).getByRole('button', { name: 'Редактировать' })).toBeInTheDocument();
+    expect(within(listSection).getByRole('button', { name: 'Удалить' })).toBeInTheDocument();
+
+    // Open and cancel confirmation without fetching
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Удалить' }));
+    expect(
+      within(listSection).getByText('Удалить запись «ТО-140: замена масла»? Отменить это нельзя.'),
+    ).toBeInTheDocument();
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Отмена' }));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Enter edit mode for record 21, then delete it and confirm edit form resets
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Редактировать' }));
+    expect(screen.getByRole('button', { name: 'Сохранить изменения' })).toBeInTheDocument();
+
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Удалить' }));
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Да, удалить' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/cars/7/maintenance/21', {
+        method: 'DELETE',
+      });
+    });
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Запись ТО удалена/i);
+    expect(within(listSection).queryByText('ТО-140: замена масла')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Сохранить запись ТО' })).toBeInTheDocument();
+  });
+
+  it('shows inline error and keeps maintenance record when DELETE fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'Ошибка удаления записи ТО' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CarManageClient car={SAMPLE_CAR} drivers={SAMPLE_DRIVERS} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'ТО и ремонт' }));
+
+    const listSection = screen.getByRole('region', { name: 'Последние записи ТО' });
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Удалить' }));
+    fireEvent.click(within(listSection).getByRole('button', { name: 'Да, удалить' }));
+
+    expect(await within(listSection).findByRole('alert')).toHaveTextContent(
+      'Ошибка удаления записи ТО',
+    );
+    expect(within(listSection).getByText('ТО-140: замена масла')).toBeInTheDocument();
+  });
+
   it('rejects cleared part quantity with inline validation error instead of silently defaulting to 1', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
