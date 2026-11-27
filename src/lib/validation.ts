@@ -257,7 +257,7 @@ const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_DATETIME_RE =
   /^(\d{4}-\d{2}-\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
 
-function isValidIsoDate(value: string): boolean {
+export function isValidIsoDate(value: string): boolean {
   const match = ISO_DATE_RE.exec(value);
   if (!match) return false;
   const year = Number(match[1]);

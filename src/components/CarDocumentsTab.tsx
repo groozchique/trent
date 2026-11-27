@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { CAR_DOCUMENT_TYPES, type CarDocumentType } from '@/db/schema';
+import { readApiError } from '@/lib/api-client';
 import { CAR_DOCUMENT_LABELS, type CarDeadlineSummary, type DeadlineState } from '@/lib/deadlines';
 import { formatMileage } from '@/lib/format';
 import {
@@ -9,6 +10,7 @@ import {
   type CarDetailDto,
   type CarDocumentDto,
 } from '@/lib/validation';
+import { FeedbackBanner, type FeedbackState } from './FeedbackBanner';
 
 const INPUT_CLASS =
   'h-10 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] disabled:opacity-60';
@@ -17,8 +19,6 @@ const LABEL_CLASS = 'mb-1.5 block text-xs font-medium text-[var(--text-secondary
 
 const PRIMARY_BTN_CLASS =
   'inline-flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 text-sm font-medium text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto';
-
-type FeedbackState = { kind: 'error' | 'success'; message: string } | null;
 
 type DocDraft = {
   expiresAt: string;
@@ -192,10 +192,9 @@ export function CarDocumentsTab({
       });
 
       if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as { error?: string } | null;
         setFeedback({
           kind: 'error',
-          message: data?.error ?? 'Не удалось сохранить документы и сроки ТО',
+          message: await readApiError(response, 'Не удалось сохранить документы и сроки ТО'),
         });
         return;
       }
@@ -327,6 +326,7 @@ export function CarDocumentsTab({
             const draft = docDrafts[type];
             const deadline = docDeadlinesByType.get(type);
             const hint = deadline ? formatDateHint(deadline.daysLeft) : null;
+            const willDeleteSavedDoc = deadline !== undefined && !draft.expiresAt.trim();
 
             return (
               <fieldset
@@ -361,6 +361,14 @@ export function CarDocumentsTab({
                     disabled={saving}
                     className={`${INPUT_CLASS} tabular-nums`}
                   />
+                  {willDeleteSavedDoc && (
+                    <p
+                      style={{ color: 'var(--status-overdue-text)' }}
+                      className="mt-1 text-[11px] font-medium"
+                    >
+                      Дата очищена — документ будет удалён при сохранении
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -400,26 +408,7 @@ export function CarDocumentsTab({
         </div>
       </div>
 
-      {feedback && (
-        <p
-          role={feedback.kind === 'error' ? 'alert' : 'status'}
-          style={{
-            backgroundColor:
-              feedback.kind === 'error' ? 'var(--status-repair-bg)' : 'var(--status-rent-bg)',
-            borderColor:
-              feedback.kind === 'error'
-                ? 'var(--status-repair-border)'
-                : 'var(--status-rent-border)',
-            color:
-              feedback.kind === 'error'
-                ? 'var(--status-repair-text)'
-                : 'var(--status-rent-text)',
-          }}
-          className="rounded-lg border px-3 py-2 text-xs font-medium sm:text-sm"
-        >
-          {feedback.message}
-        </p>
-      )}
+      <FeedbackBanner feedback={feedback} />
 
       <div className="flex justify-end">
         <button type="submit" disabled={saving} className={PRIMARY_BTN_CLASS}>

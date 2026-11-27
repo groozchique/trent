@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Search, X } from 'lucide-react';
 import type { CarStatus, UserRole } from '@/db/schema';
@@ -66,11 +66,18 @@ export function DashboardClient({
   const [query, setQuery] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [selectedCarId, setSelectedCarId] = useState<number | null>(null);
+  const refreshAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setCars(initialCars);
     setSummary(initialSummary ?? deriveFallbackSummary(initialCars));
   }, [initialCars, initialSummary]);
+
+  useEffect(() => {
+    return () => {
+      refreshAbortRef.current?.abort();
+    };
+  }, []);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filteredCars = cars.filter((car) => {
@@ -92,13 +99,22 @@ export function DashboardClient({
   const hasRentDebt = summary.totalRentDebt30d > 0;
 
   async function refreshCars() {
+    refreshAbortRef.current?.abort();
+    const controller = new AbortController();
+    refreshAbortRef.current = controller;
+
     try {
-      const response = await fetch('/api/cars', { cache: 'no-store' });
+      const response = await fetch('/api/cars', {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       if (response.ok) {
         const data = (await response.json()) as {
           cars?: CarSummaryDto[];
           summary?: FleetDashboardSummary;
         };
+        if (controller.signal.aborted) return;
         if (Array.isArray(data.cars)) {
           const nextCars = data.cars;
           setCars(nextCars);
@@ -119,7 +135,12 @@ export function DashboardClient({
     } catch {
       // Keep UI responsive and rely on router.refresh() below if immediate refetch fails.
     } finally {
-      router.refresh();
+      if (refreshAbortRef.current === controller) {
+        refreshAbortRef.current = null;
+      }
+      if (!controller.signal.aborted) {
+        router.refresh();
+      }
     }
   }
 

@@ -4,11 +4,13 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Archive, ArchiveRestore, CalendarDays, Car, Phone, User } from 'lucide-react';
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
 import { SHOW_FINES } from '@/lib/features';
+import { readApiError } from '@/lib/api-client';
 import { formatDateRu, formatDateTimeRu, formatRentalPeriod, formatRub } from '@/lib/format';
 import {
   updateDriverSchema,
   type DriverDetailDto,
 } from '@/lib/validation';
+import { type FeedbackState } from './FeedbackBanner';
 import { FineStatusPill } from './FinesListModal';
 import { ModalShell } from './ModalShell';
 import { RentalTimelineModal } from './RentalTimelineModal';
@@ -26,13 +28,6 @@ const TEXTAREA_CLASS =
   'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] disabled:opacity-60';
 
 const LABEL_CLASS = 'mb-1.5 block text-xs font-medium text-[var(--text-secondary)]';
-
-type FeedbackState = { kind: 'error' | 'success'; message: string } | null;
-
-async function readApiError(response: Response, fallback: string): Promise<string> {
-  const data = (await response.json().catch(() => null)) as { error?: string } | null;
-  return data?.error ?? fallback;
-}
 
 /** Modal showing full driver contacts, active/past rentals, fines, and admin edit/archive actions. */
 export function DriverDetailModal({

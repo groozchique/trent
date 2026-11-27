@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import { formatDateRu, formatMileage, formatSignedRubPlain, shiftUtcDaysIso } from '@/lib/format';
-import type { FleetReportDto, OwnerOptionDto, ReportPeriodType } from '@/lib/validation';
+import {
+  isValidIsoDate,
+  type FleetReportDto,
+  type OwnerOptionDto,
+  type ReportPeriodType,
+} from '@/lib/validation';
 
 export type ReportCarOption = {
   id: number;
@@ -15,7 +20,6 @@ export type ReportCarOption = {
 type PreviewFormat = 'telegram' | 'plain';
 
 const EMPTY_OWNERS: OwnerOptionDto[] = [];
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const YEAR_MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const YEAR_RE = /^(20\d{2}|2100)$/;
 
@@ -24,13 +28,6 @@ const REPORT_TITLES: Record<ReportPeriodType, string> = {
   monthly: 'Ежемесячный отчёт',
   yearly: 'Ежегодный отчёт',
 };
-
-function isValidIsoDate(value: string): boolean {
-  if (!ISO_DATE_RE.test(value)) return false;
-  const [y, m, d] = value.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
-}
 
 function getInitialScopeValue(report: FleetReportDto): string {
   if (report.ownerId !== null) return `owner:${report.ownerId}`;

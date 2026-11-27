@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
 import type { CarStatus } from '@/db/schema';
+import { readApiError } from '@/lib/api-client';
 import { createCarSchema } from '@/lib/validation';
 import { KNOWN_BRANDS } from './BrandIcon';
+import { ModalShell } from './ModalShell';
 
 const STATUS_OPTIONS: Array<{ value: CarStatus; label: string }> = [
   { value: 'available', label: 'Не в аренде' },
@@ -31,24 +32,7 @@ function AddCarModalBody({
 
   useEffect(() => {
     plateInputRef.current?.focus();
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
   }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !submitting) {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, submitting]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,8 +64,7 @@ function AddCarModalBody({
       });
 
       if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(data?.error ?? 'Не удалось добавить машину');
+        setError(await readApiError(response, 'Не удалось добавить машину'));
         return;
       }
 
@@ -95,40 +78,15 @@ function AddCarModalBody({
   }
 
   return (
-    <div
-      data-testid="add-car-modal-backdrop"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !submitting) {
-          onClose();
-        }
-      }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"
+    <ModalShell
+      title="Новая машина"
+      onClose={onClose}
+      closeDisabled={submitting}
+      maxWidthClass="max-w-md"
+      zIndexClass="z-50"
+      backdropTestId="add-car-modal-backdrop"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-car-modal-title"
-        className="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 shadow-lg sm:rounded-2xl sm:p-6"
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3.5">
-          <h2
-            id="add-car-modal-title"
-            className="text-base font-semibold tracking-tight text-[var(--text-primary)] sm:text-lg"
-          >
-            Новая машина
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            aria-label="Закрыть"
-            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-3.5">
+      <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
           <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <div>
               <label
@@ -295,8 +253,7 @@ function AddCarModalBody({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 

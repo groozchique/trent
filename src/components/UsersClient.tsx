@@ -4,12 +4,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { KeyRound, Pencil, Trash2, UserPlus } from 'lucide-react';
 import type { UserRole } from '@/db/schema';
+import { readApiError } from '@/lib/api-client';
 import { formatDateRu } from '@/lib/format';
 import {
   createUserSchema,
   updateUserSchema,
   type SafeUserDto,
 } from '@/lib/validation';
+import { FeedbackBanner, type FeedbackState } from './FeedbackBanner';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Администратор',
@@ -51,32 +53,6 @@ const LABEL_CLASS = 'mb-1.5 block text-xs font-medium text-[var(--text-secondary
 
 const SECONDARY_BTN_CLASS =
   'inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 text-xs font-medium whitespace-nowrap text-[var(--text-primary)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm';
-
-type FeedbackState = { kind: 'error' | 'success'; message: string } | null;
-
-async function readApiError(response: Response, fallback: string): Promise<string> {
-  const data = (await response.json().catch(() => null)) as { error?: string } | null;
-  return data?.error ?? fallback;
-}
-
-function FeedbackBanner({ feedback }: { feedback: FeedbackState }) {
-  if (!feedback) return null;
-  const isError = feedback.kind === 'error';
-
-  return (
-    <p
-      role={isError ? 'alert' : 'status'}
-      style={{
-        backgroundColor: isError ? 'var(--status-repair-bg)' : 'var(--status-rent-bg)',
-        borderColor: isError ? 'var(--status-repair-border)' : 'var(--status-rent-border)',
-        color: isError ? 'var(--status-repair-text)' : 'var(--status-rent-text)',
-      }}
-      className="rounded-lg border px-3 py-2 text-xs font-medium sm:text-sm"
-    >
-      {feedback.message}
-    </p>
-  );
-}
 
 /** Admin user-management console with creation, role updates, password reset, and safe deletion. */
 export function UsersClient({

@@ -14,6 +14,7 @@ export function ModalShell({
   closeDisabled = false,
   maxWidthClass = 'max-w-lg',
   zIndexClass = 'z-50',
+  backdropTestId,
   children,
 }: {
   title: ReactNode;
@@ -22,6 +23,7 @@ export function ModalShell({
   closeDisabled?: boolean;
   maxWidthClass?: string;
   zIndexClass?: string;
+  backdropTestId?: string;
   children: ReactNode;
 }) {
   const modalId = useId();
@@ -67,6 +69,7 @@ export function ModalShell({
 
   return (
     <div
+      data-testid={backdropTestId}
       onClick={(event) => {
         if (event.target === event.currentTarget && !closeDisabled) {
           onClose();
