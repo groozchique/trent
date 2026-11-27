@@ -86,12 +86,24 @@ export function formatReportPeriodLabel(
   return `${RU_MONTH_NAMES[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`;
 }
 
+function sanitizeReportLine(text: string): string {
+  return text.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+}
+
+function sanitizeTelegramText(text: string): string {
+  return sanitizeReportLine(text)
+    .replaceAll('`', "'")
+    .replaceAll('**', '')
+    .replaceAll('__', '');
+}
+
 /** Format fleet report as plain text or rich Telegram standard Markdown (`**bold**`, `__italic__`, `` `code` ``, `>` quote). */
 export function formatReportText(
   report: Omit<FleetReportDto, 'textPlain' | 'textTelegram'>,
   format: 'plain' | 'telegram',
 ): string {
   const isTg = format === 'telegram';
+  const clean = (text: string) => (isTg ? sanitizeTelegramText(text) : sanitizeReportLine(text));
   const bold = (text: string) => (isTg ? `**${text}**` : text);
   const italic = (text: string) => (isTg ? `__${text}__` : text);
   const mono = (text: string) => (isTg ? `\`${text}\`` : text);
@@ -113,17 +125,17 @@ export function formatReportText(
   const singleCar = report.carId !== null ? report.cars[0] : undefined;
   const scopeLine = isTg
     ? report.ownerId !== null
-      ? `Собственник: ${bold(report.ownerName ?? '')}`
+      ? `Собственник: ${bold(clean(report.ownerName ?? ''))}`
       : singleCar
-        ? `Автомобиль: ${bold(`${singleCar.brand} ${singleCar.model}`)} (${mono(singleCar.plate)})`
-        : `Автомобиль: ${bold(report.carLabel)}`
+        ? `Автомобиль: ${bold(`${clean(singleCar.brand)} ${clean(singleCar.model)}`)} (${mono(clean(singleCar.plate))})`
+        : `Автомобиль: ${bold(clean(report.carLabel))}`
     : report.ownerId !== null
-      ? `Собственник: ${report.ownerName ?? ''}`
-      : `Автомобиль: ${report.carLabel}`;
+      ? `Собственник: ${clean(report.ownerName ?? '')}`
+      : `Автомобиль: ${clean(report.carLabel)}`;
 
   const lines: string[] = isTg
-    ? [bold(`${periodNoun} ${reportKind}`), italic(report.periodLabel), scopeLine]
-    : [bold(`${periodNoun} ${reportKind} (${report.periodLabel})`), scopeLine];
+    ? [bold(`${periodNoun} ${reportKind}`), italic(clean(report.periodLabel)), scopeLine]
+    : [bold(`${periodNoun} ${reportKind} (${clean(report.periodLabel)})`), scopeLine];
 
   if (report.includeFinancial) {
     lines.push(
@@ -139,19 +151,21 @@ export function formatReportText(
     if (report.carId === null && report.cars.length > 0) {
       lines.push('', bold('По машинам:'));
       for (const car of report.cars) {
+        const carName = `${clean(car.brand)} ${clean(car.model)}`;
+        const carPlate = clean(car.plate);
         if (isTg) {
           const maintPart = report.includeMaintenance
             ? `, ремонт ${mono(formatSignedRubPlain(car.maintenanceCost))}`
             : '';
           lines.push(
-            `• ${bold(`${car.brand} ${car.model}`)} (${mono(car.plate)}): аренда ${mono(formatSignedRubPlain(car.paidRental))}, менеджеру ${mono(formatSignedRubPlain(car.managerIncome))}${maintPart}, собственнику ${bold(formatSignedRubPlain(car.ownerPayout))}`,
+            `• ${bold(carName)} (${mono(carPlate)}): аренда ${mono(formatSignedRubPlain(car.paidRental))}, менеджеру ${mono(formatSignedRubPlain(car.managerIncome))}${maintPart}, собственнику ${bold(formatSignedRubPlain(car.ownerPayout))}`,
           );
         } else {
           const maintPart = report.includeMaintenance
             ? `, ремонт ${formatSignedRubPlain(car.maintenanceCost)}`
             : '';
           lines.push(
-            `${car.brand} ${car.model} (${car.plate}): аренда ${formatSignedRubPlain(car.paidRental)}, менеджеру ${formatSignedRubPlain(car.managerIncome)}${maintPart}, собственнику ${formatSignedRubPlain(car.ownerPayout)}`,
+            `${carName} (${carPlate}): аренда ${formatSignedRubPlain(car.paidRental)}, менеджеру ${formatSignedRubPlain(car.managerIncome)}${maintPart}, собственнику ${formatSignedRubPlain(car.ownerPayout)}`,
           );
         }
       }
@@ -174,18 +188,21 @@ export function formatReportText(
       lines.push(italic('Работ по ремонту за период не было'));
     } else {
       for (const car of carsWithMaintenance) {
+        const carName = `${clean(car.brand)} ${clean(car.model)}`;
+        const carPlate = clean(car.plate);
         if (report.carId === null) {
           lines.push(
             isTg
-              ? `${bold(`${car.brand} ${car.model}`)} (${mono(car.plate)}): ${mono(formatSignedRubPlain(car.maintenanceCost))}`
-              : `${car.brand} ${car.model} (${car.plate}): ${formatSignedRubPlain(car.maintenanceCost)}`,
+              ? `${bold(carName)} (${mono(carPlate)}): ${mono(formatSignedRubPlain(car.maintenanceCost))}`
+              : `${carName} (${carPlate}): ${formatSignedRubPlain(car.maintenanceCost)}`,
           );
         }
         for (const item of car.maintenanceItems) {
+          const title = clean(item.title);
           lines.push(
             isTg
-              ? quote(`${mono(formatDateRu(item.performedAt))}, ${item.title}: ${mono(formatSignedRubPlain(item.totalCost))}`)
-              : `- ${formatDateRu(item.performedAt)}, ${item.title}: ${formatSignedRubPlain(item.totalCost)}`,
+              ? quote(`${mono(formatDateRu(item.performedAt))}, ${title}: ${mono(formatSignedRubPlain(item.totalCost))}`)
+              : `- ${formatDateRu(item.performedAt)}, ${title}: ${formatSignedRubPlain(item.totalCost)}`,
           );
         }
       }

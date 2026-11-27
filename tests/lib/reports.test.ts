@@ -422,6 +422,53 @@ describe('buildReport and formatReportText', () => {
     }
   });
 
+  it('sanitizes newlines and markdown tokens in user-supplied report fields without breaking Telegram quotes', () => {
+    const dirty = {
+      type: 'weekly' as const,
+      periodStart: '2026-11-23',
+      periodEnd: '2026-11-29',
+      periodLabel: 'неделя с 23.11.2026 по 29.11.2026',
+      carId: 1,
+      carLabel: 'Kia Rio (А123ВС 777)',
+      ownerId: null,
+      ownerName: null,
+      includeFinancial: true,
+      includeMaintenance: true,
+      paidRental: 10000,
+      managerIncome: 1000,
+      maintenanceCost: 2000,
+      maintenanceCount: 1,
+      ownerPayout: 7000,
+      cars: [
+        {
+          carId: 1,
+          plate: 'А123ВС`777',
+          brand: 'Kia**',
+          model: 'Rio\nLine2',
+          paidRental: 10000,
+          managerIncome: 1000,
+          maintenanceCost: 2000,
+          ownerPayout: 7000,
+          maintenanceItems: [
+            {
+              id: 1,
+              performedAt: '2026-11-26',
+              title: 'ТО_60\nЗамена `свечей` **срочно**',
+              mileage: 60000,
+              totalCost: 2000,
+            },
+          ],
+        },
+      ],
+    };
+
+    const telegram = formatReportText(dirty, 'telegram');
+    expect(telegram).toContain("> `26.11.2026`, ТО_60 Замена 'свечей' срочно: `2 000 ₽`");
+    expect(telegram).toContain('Автомобиль: **Kia Rio Line2** (`А123ВС\'777`)');
+    expect(telegram).not.toContain('\\\n');
+    expect(telegram).not.toContain('\\.');
+  });
+
   it('returns zero totals, empty cars list, and clean text on an empty fleet', async () => {
     const report = await buildReport(db, {
       type: 'weekly',
