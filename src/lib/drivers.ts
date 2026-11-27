@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import type { AppDb } from '@/db';
 import {
   cars,
@@ -10,12 +10,13 @@ import {
   type FineStatus,
   type RentalRow,
 } from '@/db/schema';
-import { getTodayIso } from '@/lib/cars';
-import { computeRentDebt30d, groupPaymentsByRental } from '@/lib/finances';
+import { getTodayIso } from '@/lib/format';
+import { computeRentDebt30d, getWindowStartIso, groupPaymentsByRental } from '@/lib/finances';
 import { buildRentalTimeline, type TimelinePaymentInput } from '@/lib/rental/timeline';
 import type {
   DriverActiveCarDto,
   DriverDetailDto,
+  DriverDto,
   DriverFineDto,
   DriverRentalHistoryDto,
   DriverSummaryDto,
@@ -91,6 +92,11 @@ function buildDriverSummary(
   };
 }
 
+/** Return lightweight driver rows for assignment selectors without loading rentals or payments. */
+export async function listDriverOptions(database: AppDb): Promise<DriverDto[]> {
+  return database.select().from(drivers).orderBy(asc(drivers.id));
+}
+
 /** Return all drivers with active cars, 30-day rental debt, and unpaid fines totals. */
 export async function listDriverSummaries(
   database: AppDb,
@@ -99,6 +105,7 @@ export async function listDriverSummaries(
   const driverRows = await database.select().from(drivers).orderBy(asc(drivers.id));
   if (driverRows.length === 0) return [];
 
+  const windowStartIso = getWindowStartIso(todayIso);
   const [rentalRows, paymentRows, fineRows] = await Promise.all([
     database
       .select({
@@ -119,7 +126,8 @@ export async function listDriverSummaries(
         amount: rentalPayments.amount,
         paidAt: rentalPayments.paidAt,
       })
-      .from(rentalPayments),
+      .from(rentalPayments)
+      .where(gte(rentalPayments.dueDate, windowStartIso)),
     database
       .select({
         driverId: fines.driverId,
@@ -127,7 +135,7 @@ export async function listDriverSummaries(
         status: fines.status,
       })
       .from(fines)
-      .where(isNotNull(fines.driverId)),
+      .where(and(isNotNull(fines.driverId), eq(fines.status, 'unpaid'))),
   ]);
 
   const rentalsByDriver = new Map<number, DriverRentalJoinRow[]>();

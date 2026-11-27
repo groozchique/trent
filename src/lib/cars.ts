@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import type { AppDb } from '@/db';
 import {
@@ -22,6 +22,8 @@ import { evaluateCarDeadlines, evaluateDateDeadline } from '@/lib/deadlines';
 import {
   computeFleetFinancialSummary,
   computeRentDebt30d,
+  getMonthStartIso,
+  getWindowStartIso,
   groupPaymentsByRental,
 } from '@/lib/finances';
 import type { SQLiteTx } from '@/lib/fines/attribution';
@@ -232,6 +234,7 @@ function resolveOwnerName(
 
 async function queryCarSummaryInputs(
   database: AppDb,
+  todayIso: string,
   options?: { carId?: number; ownerId?: number },
 ) {
   const conditions = [];
@@ -276,6 +279,10 @@ async function queryCarSummaryInputs(
     : rentalBase
   ).orderBy(desc(rentals.startDate), desc(rentals.id));
 
+  const windowStartIso = getWindowStartIso(todayIso);
+  const monthStartIso = getMonthStartIso(todayIso);
+  const minPaymentDueDate = windowStartIso < monthStartIso ? windowStartIso : monthStartIso;
+
   const rentalIds = rentalRows.map((row) => row.rental.id);
   const paymentRows = isScoped
     ? rentalIds.length > 0
@@ -287,7 +294,12 @@ async function queryCarSummaryInputs(
             paidAt: rentalPayments.paidAt,
           })
           .from(rentalPayments)
-          .where(inArray(rentalPayments.rentalId, rentalIds))
+          .where(
+            and(
+              inArray(rentalPayments.rentalId, rentalIds),
+              gte(rentalPayments.dueDate, minPaymentDueDate),
+            ),
+          )
       : []
     : await database
         .select({
@@ -296,7 +308,8 @@ async function queryCarSummaryInputs(
           amount: rentalPayments.amount,
           paidAt: rentalPayments.paidAt,
         })
-        .from(rentalPayments);
+        .from(rentalPayments)
+        .where(gte(rentalPayments.dueDate, minPaymentDueDate));
 
   const fineBase = database
     .select({
@@ -305,7 +318,9 @@ async function queryCarSummaryInputs(
       status: fines.status,
     })
     .from(fines);
-  const fineRows = await (isScoped ? fineBase.where(inArray(fines.carId, carIds)) : fineBase);
+  const fineRows = await (isScoped
+    ? fineBase.where(and(inArray(fines.carId, carIds), eq(fines.status, 'unpaid')))
+    : fineBase.where(eq(fines.status, 'unpaid')));
 
   const docBase = database
     .select({
@@ -396,9 +411,11 @@ export async function listCarSummariesWithSummary(
 ): Promise<{ cars: CarSummaryDto[]; summary: FleetDashboardSummary }> {
   const inputs = await queryCarSummaryInputs(
     database,
+    todayIso,
     options?.ownerId !== undefined ? { ownerId: options.ownerId } : undefined,
   );
   const carIds = inputs.carRows.map((row) => row.car.id);
+  const windowStartIso = getWindowStartIso(todayIso);
   const maintBase = database
     .select({
       performedAt: maintenanceRecords.performedAt,
@@ -409,8 +426,13 @@ export async function listCarSummariesWithSummary(
     carIds.length === 0
       ? []
       : await (options?.ownerId !== undefined
-          ? maintBase.where(inArray(maintenanceRecords.carId, carIds))
-          : maintBase);
+          ? maintBase.where(
+              and(
+                inArray(maintenanceRecords.carId, carIds),
+                gte(maintenanceRecords.performedAt, windowStartIso),
+              ),
+            )
+          : maintBase.where(gte(maintenanceRecords.performedAt, windowStartIso)));
 
   const carSummaries = buildCarSummaries(inputs, todayIso);
   const summary = computeFleetFinancialSummary(
@@ -428,31 +450,13 @@ export async function listCarSummariesWithSummary(
   return { cars: carSummaries, summary };
 }
 
-/** Return fleet-wide 30-day financial KPIs and urgent deadline car count. */
-export async function getFleetSummary(
-  database: AppDb,
-  todayIso = getTodayIso(),
-): Promise<FleetDashboardSummary> {
-  const { summary } = await listCarSummariesWithSummary(database, todayIso);
-  return summary;
-}
-
-/** Return all fleet cars with v2 summary metrics for dashboard and SSR pages. */
-export async function listCarSummaries(
-  database: AppDb,
-  todayIso = getTodayIso(),
-): Promise<CarSummaryDto[]> {
-  const inputs = await queryCarSummaryInputs(database);
-  return buildCarSummaries(inputs, todayIso);
-}
-
 /** Return a single car summary or null if not found. */
 export async function getCarSummary(
   database: AppDb,
   carId: number,
   todayIso = getTodayIso(),
 ): Promise<CarSummaryDto | null> {
-  const inputs = await queryCarSummaryInputs(database, { carId });
+  const inputs = await queryCarSummaryInputs(database, todayIso, { carId });
   const [row] = buildCarSummaries(inputs, todayIso);
   return row ?? null;
 }

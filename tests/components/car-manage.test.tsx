@@ -38,6 +38,7 @@ vi.mock('@/lib/cars', () => ({
 }));
 
 vi.mock('@/lib/drivers', () => ({
+  listDriverOptions: () => listDriverSummariesMock(),
   listDriverSummaries: () => listDriverSummariesMock(),
 }));
 

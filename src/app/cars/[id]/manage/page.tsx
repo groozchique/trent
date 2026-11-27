@@ -3,7 +3,7 @@ import { CarManageClient } from '@/components/CarManageClient';
 import { db } from '@/db';
 import { getCurrentUser } from '@/lib/auth/session';
 import { getCarDetail } from '@/lib/cars';
-import { listDriverSummaries } from '@/lib/drivers';
+import { listDriverOptions } from '@/lib/drivers';
 import { listOwners } from '@/lib/users';
 import { parsePositiveIntId } from '@/lib/validation';
 
@@ -35,7 +35,7 @@ export default async function ManageCarPage({
   }
 
   const [drivers, owners] = await Promise.all([
-    listDriverSummaries(db),
+    listDriverOptions(db),
     listOwners(db),
   ]);
 
