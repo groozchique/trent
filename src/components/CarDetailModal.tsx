@@ -7,7 +7,7 @@ import type { RentalPeriodicity, UserRole } from '@/db/schema';
 import { CAR_DOCUMENT_LABELS, type DeadlineState } from '@/lib/deadlines';
 import type { CarDetailDto, FineDto, MaintenanceDto } from '@/lib/validation';
 import { SHOW_FINES } from '@/lib/features';
-import { formatDateRu, formatMileage, formatRentalPeriod, formatRub } from '@/lib/format';
+import { formatDateRu, formatMileage, formatRentalPeriod, formatRub, getTodayIso } from '@/lib/format';
 import { BrandIcon } from './BrandIcon';
 import { FineDetailModal } from './FineDetailModal';
 import { FineListRow, FinesListModal } from './FinesListModal';
@@ -168,7 +168,7 @@ export function CarDetailModal({
     handleChildUpdated();
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = getTodayIso();
   const visibleCar = car && car.id === carId ? car : null;
   const overduePaymentsCount = visibleCar
     ? visibleCar.timeline.filter((item) => item.status === 'overdue').length

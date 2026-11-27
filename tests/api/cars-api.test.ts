@@ -5,7 +5,7 @@ import { carDocuments, cars, drivers, fines, maintenanceParts, maintenanceRecord
 import { seedDatabase } from '@/db/seed';
 import { SESSION_COOKIE_NAME, createSession } from '@/lib/auth/session';
 import { handleApiError } from '@/lib/cars';
-import { shiftUtcDaysIso } from '@/lib/format';
+import { getTodayIso, shiftUtcDaysIso } from '@/lib/format';
 import { createCarSchema, updateCarSchema, upsertRentalSchema } from '@/lib/validation';
 import { GET as listCarsGet, POST as createCarPost } from '@/app/api/cars/route';
 import {
@@ -583,8 +583,8 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
       ).status,
     ).toBe(404);
 
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const startIso = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
+    const startIso = shiftUtcDaysIso(todayIso, -7);
 
     const rentalRes1 = await upsertRentalPut(
       jsonReq('http://localhost/api/cars/1/rental', 'PUT', {
@@ -940,7 +940,7 @@ describe('Fleet, fines, rental & maintenance API routes', () => {
     }
 
     // Set up rentals, payments, maintenance, fines, and deadlines on car2 (owner1), car3 (owner2), car4 (unowned)
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
     const dMinus2 = shiftUtcDaysIso(todayIso, -2);
     const dMinus1 = shiftUtcDaysIso(todayIso, -1);
 

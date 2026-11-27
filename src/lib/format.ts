@@ -22,6 +22,34 @@ export function shiftUtcDaysIso(isoDate: string, days: number): string {
   return formatUtcDateIso(parseUtcDateMs(isoDate) + days * DAY_MS);
 }
 
+function getConfiguredTimeZone(): string | undefined {
+  if (typeof process === 'undefined') return undefined;
+  const raw = process.env?.APP_TIMEZONE?.trim() || process.env?.TZ?.trim();
+  return raw || undefined;
+}
+
+/** Return calendar date (`YYYY-MM-DD`) in `timeZone`, `APP_TIMEZONE`/`TZ`, or the runtime local timezone. */
+export function getTodayIso(now: Date = new Date(), timeZone?: string): string {
+  const resolvedTz = timeZone?.trim() || getConfiguredTimeZone();
+  if (resolvedTz) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: resolvedTz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(now);
+    } catch {
+      // Fall back to runtime local timezone if TZ/APP_TIMEZONE is not a valid IANA identifier (e.g. `:/etc/localtime`).
+    }
+  }
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
 /** Return signed whole UTC calendar days from `baseIso` to `targetIso`. */
 export function diffUtcDays(targetIso: string, baseIso: string): number {
   return Math.round((parseUtcDateMs(targetIso) - parseUtcDateMs(baseIso)) / DAY_MS);

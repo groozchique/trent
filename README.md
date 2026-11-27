@@ -58,7 +58,7 @@ docker compose up -d --build
 docker exec trent-backend node dist/seed.mjs
 ```
 
-Вторая команда нужна при первом запуске на пустой базе, чтобы создать тестовых пользователей и машины. Контейнер `trent-backend` слушает порт `127.0.0.1:3000`, кладёт SQLite-файл в `./data:/app/data` (`DATABASE_URL=/app/data/taxi.db`), работает в поясе `Europe/Moscow` и проверяет готовность по адресу `/login`.
+Вторая команда нужна при первом запуске на пустой базе, чтобы создать тестовых пользователей и машины. Контейнер `trent-backend` слушает порт `127.0.0.1:3000`, кладёт SQLite-файл в `./data:/app/data` (`DATABASE_URL=/app/data/taxi.db`), использует часовой пояс из `TZ` или `APP_TIMEZONE` (в `docker-compose.yml` по умолчанию задан `Europe/Moscow`, без переменных берётся системный пояс) и проверяет готовность по адресу `/login`.
 
 ## Разработка
 

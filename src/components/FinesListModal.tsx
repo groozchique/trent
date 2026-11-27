@@ -3,7 +3,7 @@
 import type { CSSProperties } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { FineDto } from '@/lib/validation';
-import { formatDateRu, formatDateTimeRu, formatRub, getDiscountState } from '@/lib/format';
+import { formatDateRu, formatDateTimeRu, formatRub, getDiscountState, getTodayIso } from '@/lib/format';
 import { ModalShell } from './ModalShell';
 
 const FINE_STATUS_META: Record<FineDto['status'], { label: string; style: CSSProperties }> = {
@@ -139,7 +139,7 @@ export function FinesListModal({
   onSelectFine: (fine: FineDto) => void;
   onClose: () => void;
 }) {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = getTodayIso();
 
   return (
     <ModalShell

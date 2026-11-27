@@ -26,6 +26,7 @@ import {
 } from '@/lib/finances';
 import type { SQLiteTx } from '@/lib/fines/attribution';
 import { buildRentalTimeline } from '@/lib/rental/timeline';
+import { getTodayIso } from '@/lib/format';
 import { formatUserLabel } from '@/lib/users';
 import {
   ApiError,
@@ -47,10 +48,7 @@ const DOCUMENT_TYPE_ORDER = new Map<CarDocumentType, number>(
   CAR_DOCUMENT_TYPES.map((docType, index) => [docType, index]),
 );
 
-/** Return current UTC calendar date as `YYYY-MM-DD`. */
-export function getTodayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+export { getTodayIso };
 
 /** Validate a route param as a strictly positive integer or throw Russian ApiError(400). */
 export function requirePositiveIntParam(raw: string, errorMessage: string): number {

@@ -14,6 +14,7 @@ import {
   users,
 } from '@/db/schema';
 import { seedDatabase } from '@/db/seed';
+import { getTodayIso } from '@/lib/format';
 
 function verifyScrypt(plain: string, stored: string): boolean {
   const [saltHex, hashHex] = stored.split(':');
@@ -83,7 +84,7 @@ describe('database schema and seed', () => {
     expect(historicalSkodaRental?.endDate).not.toBeNull();
     expect(historicalSkodaRental?.driverId).not.toBeNull();
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
     const docDiffs = allDocs.map((d) => daysBetweenIso(d.expiresAt, todayIso));
     expect(docDiffs.some((d) => d < 0)).toBe(true); // expired
     expect(docDiffs.some((d) => d >= 0 && d <= 14)).toBe(true); // warning

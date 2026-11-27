@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eq } from 'drizzle-orm';
 import { hashPassword } from '../lib/auth/password';
+import { getTodayIso } from '../lib/format';
 import { resolveFineDriverId } from '../lib/fines/attribution';
 import type { AppDb } from './index';
 import {
@@ -43,7 +44,7 @@ export async function seedDatabase(database: AppDb): Promise<void> {
     .limit(1);
   const defaultOwnerId = ownerUser?.id ?? null;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayIso();
   const baseUtcMs = Date.parse(`${todayStr}T00:00:00Z`);
 
   const seedCars = [

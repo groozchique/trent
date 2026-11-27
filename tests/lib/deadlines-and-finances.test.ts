@@ -15,6 +15,7 @@ import {
   getWindowStartIso,
   sumPaidAndManagerInRange,
 } from '@/lib/finances';
+import { getTodayIso } from '@/lib/format';
 import {
   createCarSchema,
   createDriverSchema,
@@ -410,6 +411,36 @@ describe('30-day finances engine', () => {
       netIncome30d: 7350, // 9000 - 650 - 1000
       urgentDeadlineCarsCount: 0,
     });
+  });
+
+  it('computes todayIso across explicit timezones, APP_TIMEZONE/TZ overrides, and invalid TZ fallback', () => {
+    const instant = new Date('2026-11-30T22:30:00Z');
+    expect(getTodayIso(instant, 'UTC')).toBe('2026-11-30');
+    expect(getTodayIso(instant, 'America/New_York')).toBe('2026-11-30');
+
+    const moscowToday = getTodayIso(instant, 'Europe/Moscow');
+    expect(moscowToday).toBe('2026-12-01');
+    expect(getMonthStartIso(moscowToday)).toBe('2026-12-01');
+    expect(getTodayIso(instant, 'Asia/Vladivostok')).toBe('2026-12-01');
+
+    const prevAppTz = process.env.APP_TIMEZONE;
+    const prevTz = process.env.TZ;
+    try {
+      process.env.TZ = 'UTC';
+      process.env.APP_TIMEZONE = 'Europe/Moscow';
+      expect(getTodayIso(instant)).toBe('2026-12-01');
+
+      delete process.env.APP_TIMEZONE;
+      expect(getTodayIso(instant)).toBe('2026-11-30');
+
+      process.env.TZ = ':/etc/localtime';
+      expect(getTodayIso(instant)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    } finally {
+      if (prevAppTz === undefined) delete process.env.APP_TIMEZONE;
+      else process.env.APP_TIMEZONE = prevAppTz;
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
   });
 });
 

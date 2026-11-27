@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { UserRole } from '@/db/schema';
 import type { FineDto } from '@/lib/validation';
-import { formatDateRu, formatDateTimeRu, formatRub } from '@/lib/format';
+import { formatDateRu, formatDateTimeRu, formatRub, getTodayIso } from '@/lib/format';
 import { FineStatusPill, getFineDiscountMeta } from './FinesListModal';
 import { ModalShell } from './ModalShell';
 
@@ -30,7 +30,7 @@ export function FineDetailModal({
     setError(null);
   }, [fine]);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = getTodayIso();
   const discountMeta = getFineDiscountMeta(currentFine, todayIso);
 
   async function handleToggleStatus() {

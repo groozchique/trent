@@ -4,7 +4,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import type { RentalPeriodicity, UserRole } from '@/db/schema';
 import type { TimelineItem } from '@/lib/rental/timeline';
 import type { RentalDto } from '@/lib/validation';
-import { formatDateRu, formatRentalPeriod, formatRub } from '@/lib/format';
+import { formatDateRu, formatRentalPeriod, formatRub, getTodayIso } from '@/lib/format';
 import { ModalShell } from './ModalShell';
 
 const PERIODICITY_SHORT: Record<RentalPeriodicity, string> = {
@@ -101,7 +101,7 @@ export function RentalTimelineModal({
 
       const data = (await response.json()) as { payment?: { paidAt: string | null } };
       const nextPaidAt = data.payment?.paidAt ?? (nextPaid ? new Date().toISOString() : null);
-      const todayIso = new Date().toISOString().slice(0, 10);
+      const todayIso = getTodayIso();
       const closedByToday =
         !rental.active && rental.endDate !== null && rental.endDate <= todayIso;
 
