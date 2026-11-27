@@ -359,6 +359,19 @@ describe('syncCarFines', () => {
     expect(fine901?.driverId).toBe(driverB.id);
     expect(fine901?.status).toBe('paid');
     expect(fine902?.driverId).toBe(driverB.id);
+
+    // Provider returning unpaid must not downgrade locally marked paid fine back to unpaid
+    payload = payload.map((item) =>
+      item.resolutionNumber === '18810177261100000901'
+        ? { ...item, status: 'unpaid' }
+        : item,
+    );
+    await syncCarFines(db, car.id, car.plate, { stsNumber: null, provider });
+    const [afterDowngradeAttempt] = await db
+      .select()
+      .from(fines)
+      .where(eq(fines.resolutionNumber, '18810177261100000901'));
+    expect(afterDowngradeAttempt.status).toBe('paid');
   });
 });
 

@@ -101,6 +101,7 @@ export function handleApiError(err: unknown): NextResponse {
   if (uniqueMessage !== null) {
     return NextResponse.json({ error: uniqueMessage }, { status: 409 });
   }
+  console.error('[API 500]', err);
   return NextResponse.json({ error: 'Внутренняя ошибка сервера' }, { status: 500 });
 }
 

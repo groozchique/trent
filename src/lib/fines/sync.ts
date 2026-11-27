@@ -39,6 +39,7 @@ export async function syncCarFines(
         carId: fines.carId,
         driverId: fines.driverId,
         resolutionNumber: fines.resolutionNumber,
+        status: fines.status,
       })
       .from(fines)
       .where(inArray(fines.resolutionNumber, resolutionNumbers))
@@ -63,12 +64,14 @@ export async function syncCarFines(
       const existingRow = existingByRes.get(fine.resolutionNumber);
       if (existingRow !== undefined) {
         if (existingRow.carId !== carId) continue;
+        const preservedStatus =
+          existingRow.status === 'paid' && fine.status === 'unpaid' ? 'paid' : fine.status;
         const driverPatch =
           existingRow.driverId === null
             ? { driverId: resolveFineDriverId(tx, carId, fine.violatedAt) }
             : {};
         tx.update(fines)
-          .set({ ...mutableFields, ...driverPatch })
+          .set({ ...mutableFields, status: preservedStatus, ...driverPatch })
           .where(eq(fines.id, existingRow.id))
           .run();
         updated += 1;

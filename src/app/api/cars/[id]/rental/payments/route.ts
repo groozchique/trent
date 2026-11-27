@@ -27,7 +27,12 @@ export async function POST(request: Request, context: RouteIdContext) {
         : and(eq(rentals.carId, carId), eq(rentals.active, true));
 
     const [rental] = await db
-      .select({ id: rentals.id, rateAmount: rentals.rateAmount })
+      .select({
+        id: rentals.id,
+        rateAmount: rentals.rateAmount,
+        startDate: rentals.startDate,
+        endDate: rentals.endDate,
+      })
       .from(rentals)
       .where(rentalCondition)
       .limit(1);
@@ -40,6 +45,16 @@ export async function POST(request: Request, context: RouteIdContext) {
               : 'Аренда для автомобиля не настроена',
         },
         { status: 404 },
+      );
+    }
+
+    if (
+      data.dueDate < rental.startDate ||
+      (rental.endDate !== null && data.dueDate > rental.endDate)
+    ) {
+      return NextResponse.json(
+        { error: 'Дата платежа выходит за пределы периода аренды' },
+        { status: 400 },
       );
     }
 

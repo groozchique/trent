@@ -15,7 +15,7 @@ import {
 import { seedDatabase } from '@/db/seed';
 import { SESSION_COOKIE_NAME, createSession } from '@/lib/auth/session';
 import * as finesProviderModule from '@/lib/fines/provider';
-import { shiftUtcDaysIso } from '@/lib/format';
+import { getTodayIso, shiftUtcDaysIso } from '@/lib/format';
 import { GET as listCarsGet, POST as createCarPost } from '@/app/api/cars/route';
 import { GET as getCarDetailGet, PATCH as updateCarPatch } from '@/app/api/cars/[id]/route';
 import { PUT as upsertRentalPut } from '@/app/api/cars/[id]/rental/route';
@@ -331,7 +331,7 @@ describe('Car v2 API routes (lifecycle, fines status, documents, maintenance edi
       ])
       .returning();
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
     const dayMinus10 = shiftUtcDaysIso(todayIso, -10);
     const dayMinus9 = shiftUtcDaysIso(todayIso, -9);
     const dayMinus5 = shiftUtcDaysIso(todayIso, -5);
@@ -597,7 +597,7 @@ describe('Car v2 API routes (lifecycle, fines status, documents, maintenance edi
       .returning();
 
     const [driverA] = await db.insert(drivers).values([{ fullName: 'Водитель А' }]).returning();
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
     const startIso = shiftUtcDaysIso(todayIso, -5);
 
     const [rentalA, rentalB] = await db
@@ -802,7 +802,7 @@ describe('Car v2 API routes (lifecycle, fines status, documents, maintenance edi
     await loginAs('admin');
     const db = mockState.db!;
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
     const soonIso = shiftUtcDaysIso(todayIso, 5);
     const expiredIso = shiftUtcDaysIso(todayIso, -2);
     const okIso = shiftUtcDaysIso(todayIso, 60);
@@ -1021,7 +1021,7 @@ describe('Car v2 API routes (lifecycle, fines status, documents, maintenance edi
       .values({ fullName: 'Волков Сергей Иванович', phone: '+7 916 555-55-55' })
       .returning();
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
 
     // 1. Omitted managerCommissionPercent defaults to 0
     const defaultRes = await upsertRentalPut(
@@ -1124,5 +1124,109 @@ describe('Car v2 API routes (lifecycle, fines status, documents, maintenance edi
     expect(overRes.status).toBe(400);
     const overBody = (await overRes.json()) as { error: string };
     expect(overBody.error).toContain('Процент менеджера не может быть больше 100');
+  });
+
+  it('rejects closing nonexistent rental via PUT active=false, rejects backdated commission/periodicity edits after payments, allows rollover, and enforces payment date bounds', async () => {
+    await loginAs('admin');
+    const db = mockState.db!;
+
+    const [car] = await db
+      .insert(cars)
+      .values({ plate: 'М999ММ 777', brand: 'Kia', model: 'Rio', status: 'available', mileage: 15000 })
+      .returning();
+    const [driver] = await db
+      .insert(drivers)
+      .values({ fullName: 'Тестов Сергей' })
+      .returning();
+
+    const closeWithoutActive = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2000,
+        periodicity: 'daily',
+        startDate: '2026-11-01',
+        active: false,
+      }),
+      idCtx(car.id),
+    );
+    expect(closeWithoutActive.status).toBe(400);
+
+    const createRes = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2000,
+        periodicity: 'daily',
+        startDate: '2026-11-01',
+        managerCommissionPercent: 10,
+      }),
+      idCtx(car.id),
+    );
+    expect(createRes.status).toBe(200);
+    const { rental: firstRental } = (await createRes.json()) as { rental: { id: number } };
+
+    // Out-of-bounds payment dueDate before startDate -> 400
+    const beforeStartPay = await togglePaymentPost(
+      jsonReq('http://localhost/x', 'POST', {
+        rentalId: firstRental.id,
+        dueDate: '2026-10-31',
+        paid: true,
+      }),
+      idCtx(car.id),
+    );
+    expect(beforeStartPay.status).toBe(400);
+
+    const validPay = await togglePaymentPost(
+      jsonReq('http://localhost/x', 'POST', {
+        rentalId: firstRental.id,
+        dueDate: '2026-11-05',
+        paid: true,
+      }),
+      idCtx(car.id),
+    );
+    expect(validPay.status).toBe(200);
+
+    // Changing commission/periodicity on or before lastPaidDueDate -> 400
+    const backdatedCommissionEdit = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2000,
+        periodicity: 'daily',
+        startDate: '2026-11-01',
+        managerCommissionPercent: 20,
+      }),
+      idCtx(car.id),
+    );
+    expect(backdatedCommissionEdit.status).toBe(400);
+
+    // Changing commission with startDate > lastPaidDueDate rolls over cleanly and preserves old rental
+    const rolloverRes = await upsertRentalPut(
+      jsonReq('http://localhost/x', 'PUT', {
+        driverId: driver.id,
+        rateAmount: 2200,
+        periodicity: 'weekly',
+        startDate: '2026-11-06',
+        managerCommissionPercent: 20,
+      }),
+      idCtx(car.id),
+    );
+    expect(rolloverRes.status).toBe(200);
+    const { rental: secondRental } = (await rolloverRes.json()) as { rental: { id: number } };
+    expect(secondRental.id).not.toBe(firstRental.id);
+
+    const [closedFirst] = await db.select().from(rentals).where(eq(rentals.id, firstRental.id));
+    expect(closedFirst.active).toBe(false);
+    expect(closedFirst.endDate).toBe('2026-11-05');
+    expect(closedFirst.managerCommissionPercent).toBe(10);
+
+    // Out-of-bounds payment dueDate after closed rental's endDate -> 400
+    const afterEndPay = await togglePaymentPost(
+      jsonReq('http://localhost/x', 'POST', {
+        rentalId: firstRental.id,
+        dueDate: '2026-11-06',
+        paid: true,
+      }),
+      idCtx(car.id),
+    );
+    expect(afterEndPay.status).toBe(400);
   });
 });

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, max } from 'drizzle-orm';
 import { db } from '@/db';
-import { cars, rentals } from '@/db/schema';
+import { cars, rentalPayments, rentals } from '@/db/schema';
 import { requireAdmin } from '@/lib/auth/session';
 import {
+  ApiError,
   getTodayIso,
   handleApiError,
   parseCarIdParam,
@@ -39,11 +40,17 @@ export async function PUT(request: Request, context: RouteIdContext) {
         .where(and(eq(rentals.carId, carId), eq(rentals.active, true)))
         .get();
 
+      if (!activeRental && data.active === false) {
+        throw new ApiError(400, 'Нет активной аренды для завершения');
+      }
+
       const isExplicitDriverId = data.driverId !== undefined && data.driverId !== null;
       const isDriverSwitch =
         activeRental !== undefined &&
         isExplicitDriverId &&
         activeRental.driverId !== resolvedDriver.id;
+
+      let shouldRolloverOnScheduleChange = false;
 
       if (isDriverSwitch) {
         const prevEndDate =
@@ -54,6 +61,38 @@ export async function PUT(request: Request, context: RouteIdContext) {
           .set({ active: false, endDate: prevEndDate })
           .where(eq(rentals.id, activeRental.id))
           .run();
+      } else if (activeRental !== undefined && data.active) {
+        const scheduleOrCommissionChanged =
+          data.periodicity !== activeRental.periodicity ||
+          data.startDate !== activeRental.startDate ||
+          data.managerCommissionPercent !== activeRental.managerCommissionPercent;
+
+        if (scheduleOrCommissionChanged) {
+          const paidRow = tx
+            .select({ lastPaidDueDate: max(rentalPayments.dueDate) })
+            .from(rentalPayments)
+            .where(
+              and(
+                eq(rentalPayments.rentalId, activeRental.id),
+                isNotNull(rentalPayments.paidAt),
+              ),
+            )
+            .get();
+          const lastPaidDueDate = paidRow?.lastPaidDueDate ?? null;
+          if (lastPaidDueDate !== null) {
+            if (data.startDate <= lastPaidDueDate) {
+              throw new ApiError(
+                400,
+                'Нельзя менять дату начала, периодичность или комиссию задним числом: уже есть оплаченные платежи',
+              );
+            }
+            shouldRolloverOnScheduleChange = true;
+            tx.update(rentals)
+              .set({ active: false, endDate: shiftUtcDaysIso(data.startDate, -1) })
+              .where(eq(rentals.id, activeRental.id))
+              .run();
+          }
+        }
       }
 
       const nextEndDate =
@@ -75,7 +114,7 @@ export async function PUT(request: Request, context: RouteIdContext) {
       };
 
       const savedRental =
-        activeRental !== undefined && !isDriverSwitch
+        activeRental !== undefined && !isDriverSwitch && !shouldRolloverOnScheduleChange
           ? tx
               .update(rentals)
               .set(rentalValues)
