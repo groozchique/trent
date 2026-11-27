@@ -4,10 +4,18 @@ import { eq } from 'drizzle-orm';
 import { createDb, type AppDb } from '@/db';
 import { sessions, users } from '@/db/schema';
 import { seedDatabase } from '@/db/seed';
-import { hashPassword, verifyPassword } from '@/lib/auth/password';
+import {
+  DUMMY_PASSWORD_HASH,
+  hashPassword,
+  hashPasswordAsync,
+  verifyPassword,
+  verifyPasswordAsync,
+} from '@/lib/auth/password';
+import { resetLoginRateLimits } from '@/lib/auth/rate-limit';
 import {
   AuthError,
   SESSION_COOKIE_NAME,
+  buildSessionCookieOptions,
   createSession,
   deleteSession,
   getCurrentUser,
@@ -119,6 +127,7 @@ describe('RBAC helpers and auth API routes', () => {
   });
 
   beforeEach(async () => {
+    resetLoginRateLimits();
     mockState.cookieJar.clear();
     if (mockState.db) {
       await mockState.db.delete(sessions);
@@ -284,5 +293,67 @@ describe('RBAC helpers and auth API routes', () => {
       .from(sessions)
       .where(eq(sessions.id, expiredToken));
     expect(leftover).toHaveLength(0);
+  });
+
+  it('supports async scrypt, prunes expired sessions on createSession, respects COOKIE_SECURE, and rate-limits failed logins with 429', async () => {
+    const hashed = await hashPasswordAsync('asyncPass1');
+    await expect(verifyPasswordAsync('asyncPass1', hashed)).resolves.toBe(true);
+    await expect(verifyPasswordAsync('wrongPass', hashed)).resolves.toBe(false);
+    await expect(verifyPasswordAsync('wrongPass', DUMMY_PASSWORD_HASH)).resolves.toBe(false);
+
+    const prevSecure = process.env.COOKIE_SECURE;
+    try {
+      process.env.COOKIE_SECURE = 'false';
+      expect(buildSessionCookieOptions().secure).toBe(false);
+      process.env.COOKIE_SECURE = 'true';
+      expect(buildSessionCookieOptions().secure).toBe(true);
+    } finally {
+      if (prevSecure === undefined) delete process.env.COOKIE_SECURE;
+      else process.env.COOKIE_SECURE = prevSecure;
+    }
+
+    const [admin] = await mockState.db!.select().from(users).where(eq(users.username, 'admin'));
+    await mockState.db!.insert(sessions).values({
+      id: 'c'.repeat(64),
+      userId: admin.id,
+      expiresAt: Date.now() - 10_000,
+    });
+    await createSession(mockState.db!, admin.id);
+    const expiredLeft = await mockState.db!
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, 'c'.repeat(64)));
+    expect(expiredLeft).toHaveLength(0);
+
+    for (let i = 0; i < 10; i += 1) {
+      const res = await loginPost(
+        new Request('http://localhost/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
+          body: JSON.stringify({ username: 'admin', password: 'wrong' }),
+        }),
+      );
+      expect(res.status).toBe(401);
+    }
+
+    const lockedRes = await loginPost(
+      new Request('http://localhost/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
+        body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+      }),
+    );
+    expect(lockedRes.status).toBe(429);
+    expect(Number(lockedRes.headers.get('Retry-After'))).toBeGreaterThan(0);
+
+    // Different IP still succeeds and clears its failure counter
+    const otherIpRes = await loginPost(
+      new Request('http://localhost/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.11' },
+        body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+      }),
+    );
+    expect(otherIpRes.status).toBe(200);
   });
 });

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
-import { eq } from 'drizzle-orm';
+import { eq, lte } from 'drizzle-orm';
 import { db, type AppDb } from '@/db';
 import { sessions, users, type UserRole } from '@/db/schema';
 
@@ -27,22 +27,29 @@ export class AuthError extends Error {
 
 /** Build HttpOnly SameSite=Lax cookie options for session cookies. */
 export function buildSessionCookieOptions(maxAge = SESSION_TTL_SECONDS) {
+  const secure =
+    process.env.COOKIE_SECURE !== undefined
+      ? process.env.COOKIE_SECURE === 'true'
+      : process.env.NODE_ENV === 'production';
+
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
     path: '/',
-    secure: process.env.NODE_ENV === 'production',
+    secure,
     maxAge,
   };
 }
 
-/** Create a 32-byte random hex session valid for 7 days. */
+/** Create a 32-byte random hex session valid for 7 days and purge expired rows. */
 export async function createSession(
   database: AppDb,
   userId: number,
 ): Promise<{ token: string; expiresAt: number }> {
+  const now = Date.now();
+  await database.delete(sessions).where(lte(sessions.expiresAt, now));
   const token = randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const expiresAt = now + SESSION_TTL_MS;
   await database.insert(sessions).values({ id: token, userId, expiresAt });
   return { token, expiresAt };
 }

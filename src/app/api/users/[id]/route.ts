@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { cars, sessions, users, type UserRole } from '@/db/schema';
-import { hashPassword } from '@/lib/auth/password';
+import { hashPasswordAsync } from '@/lib/auth/password';
 import { requireAdmin } from '@/lib/auth/session';
 import {
   ApiError,
@@ -23,6 +23,8 @@ export async function PATCH(request: Request, context: RouteIdContext) {
     await requireAdmin();
     const targetId = await parseUserIdParam(context);
     const data = await parseJsonBody(request, updateUserSchema);
+    const nextPasswordHash =
+      data.password !== undefined ? await hashPasswordAsync(data.password) : undefined;
 
     const user = db.transaction((tx) => {
       const target = tx
@@ -47,8 +49,8 @@ export async function PATCH(request: Request, context: RouteIdContext) {
       if (data.displayName !== undefined) {
         updates.displayName = data.displayName;
       }
-      if (data.password !== undefined) {
-        updates.passwordHash = hashPassword(data.password);
+      if (nextPasswordHash !== undefined) {
+        updates.passwordHash = nextPasswordHash;
       }
 
       const updated = tx

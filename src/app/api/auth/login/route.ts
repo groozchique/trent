@@ -3,7 +3,13 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { users } from '@/db/schema';
-import { verifyPassword } from '@/lib/auth/password';
+import { DUMMY_PASSWORD_HASH, verifyPasswordAsync } from '@/lib/auth/password';
+import {
+  checkLoginRateLimit,
+  clearLoginFailures,
+  getClientIp,
+  recordLoginFailure,
+} from '@/lib/auth/rate-limit';
 import {
   SESSION_COOKIE_NAME,
   buildSessionCookieOptions,
@@ -36,16 +42,31 @@ export async function POST(request: Request) {
   }
 
   const { username, password } = parsed.data;
+  const clientIp = getClientIp(request);
+  const limit = checkLoginRateLimit(clientIp, username);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: 'Слишком много попыток входа. Попробуйте позже' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSec) } },
+    );
+  }
+
   const [userRow] = await db
     .select()
     .from(users)
     .where(eq(users.username, username))
     .limit(1);
 
-  if (!userRow || !verifyPassword(password, userRow.passwordHash)) {
+  const passwordValid = await verifyPasswordAsync(
+    password,
+    userRow ? userRow.passwordHash : DUMMY_PASSWORD_HASH,
+  );
+  if (!userRow || !passwordValid) {
+    recordLoginFailure(clientIp, username);
     return NextResponse.json({ error: 'Неверный логин или пароль' }, { status: 401 });
   }
 
+  clearLoginFailures(clientIp, username);
   const { token } = await createSession(db, userRow.id);
   const user: SessionUser = {
     id: userRow.id,

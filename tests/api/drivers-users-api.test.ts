@@ -14,13 +14,14 @@ import {
   users,
 } from '@/db/schema';
 import { seedDatabase } from '@/db/seed';
+import { resetLoginRateLimits } from '@/lib/auth/rate-limit';
 import { verifyPassword } from '@/lib/auth/password';
 import * as sessionModule from '@/lib/auth/session';
 import { SESSION_COOKIE_NAME, createSession } from '@/lib/auth/session';
 import { listDriverSummaries } from '@/lib/drivers';
 import { getDriverDetail } from '@/lib/drivers';
 import { listOwners, listUsersSafe } from '@/lib/users';
-import { shiftUtcDaysIso } from '@/lib/format';
+import { getTodayIso, shiftUtcDaysIso } from '@/lib/format';
 import { POST as loginPost } from '@/app/api/auth/login/route';
 import { POST as endRentalPost } from '@/app/api/cars/[id]/rental/end/route';
 import { POST as togglePaymentPost } from '@/app/api/cars/[id]/rental/payments/route';
@@ -100,6 +101,7 @@ describe('Drivers & Admin Users libraries and API routes', () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    resetLoginRateLimits();
     mockState.cookieJar.clear();
     const db = mockState.db!;
     await db.delete(carDocuments);
@@ -276,7 +278,7 @@ describe('Drivers & Admin Users libraries and API routes', () => {
       ])
       .returning();
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getTodayIso();
     const dMinus10 = shiftUtcDaysIso(todayIso, -10);
     const dMinus8 = shiftUtcDaysIso(todayIso, -8);
     const dMinus3 = shiftUtcDaysIso(todayIso, -3);
